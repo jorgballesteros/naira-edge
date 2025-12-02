@@ -1,5 +1,5 @@
 
-# *Módulo 1 — Introducción al Edge Computing*
+# *Módulo 1. Introducción al Edge Computing*
 
 ## **1. ¿Qué es el Edge Computing?**
 

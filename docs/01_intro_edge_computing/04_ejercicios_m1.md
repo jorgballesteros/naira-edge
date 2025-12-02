@@ -1,4 +1,4 @@
-# Ejercicios — Módulo 1 Introducción al Edge Computing
+# Ejercicios — Módulo 1. Introducción al Edge Computing
 
 ## **Ejercicio 1 — Identificar procesos que deben ejecutarse en el Edge**
 En agricultura digital, no todos los procesos pueden depender de la nube.

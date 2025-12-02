@@ -1,4 +1,4 @@
-# Guion docente — Módulo 1 Introducción al Edge Computing
+# Guion docente — Módulo 1. Introducción al Edge Computing
 
 Duración estimada: **3 horas**
 
