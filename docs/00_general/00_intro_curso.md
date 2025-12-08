@@ -9,7 +9,7 @@ Al finalizar, cada participante habrá construido un  **nodo edge funcional** ca
 # Planificación
 
 La planificación del curso se estructura en sesiones progresivas y eminentemente prácticas que acompañan al alumnado desde los conceptos básicos de edge computing hasta la construcción completa de un nodo agrícola inteligente.
-![image info](../assets/naira_edge_agriculture.png)
+![image info](../../assets/naira_edge_agriculture.png)
 Se comienza configurando la Raspberry Pi como plataforma robusta de adquisición, incorporando sensores de clima, suelo, cultivo, riego y diagnóstico. A continuación, se desarrolla un pipeline local de procesado que incluye filtrado, cálculo de indicadores agronómicos y predicción ligera mediante TinyML. 
 
 Posteriormente, se integran comunicaciones eficientes mediante MQTT y REST, y se implementa la automatización de actuadores para control de riego y generación de alertas. La planificación culmina con la integración total del sistema y un proyecto final en el que cada participante despliega un nodo edge NAIRA completamente funcional en un escenario realista.

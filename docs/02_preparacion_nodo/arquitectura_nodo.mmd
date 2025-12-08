@@ -1,0 +1,77 @@
+flowchart LR
+
+classDef arena fill:#DAD7CD,stroke:#344E41,stroke-width:1px,color:#000;
+classDef verde fill:#A3B18A,stroke:#344E41,stroke-width:1px,color:#fff;
+classDef verde-medio fill:#588157,stroke:#344E41,stroke-width:1px,color:#fff;
+classDef verde-oscuro fill:#3A5A40,stroke:#344E41,stroke-width:1px,color:#fff;
+
+subgraph S [SENSORS - Datos de campo]
+    A1[Humedad suelo]
+    A2[Tensiometros 10-30 cm]
+    A3[Caudalimetro]
+    A4[Camara VGA]
+    A5[Multiespectral]
+    A6[Temperatura interna]
+    A7[Meteo API]
+end
+class S verde-oscuro;
+
+subgraph E [EDGE - Nodo NAIRA]
+    B1[Adquisicion de datos]
+    B2[Procesamiento local]
+    B3[IA ligera]
+    B4[Deteccion de eventos]
+    B6[Envio MQTT-HTTP]
+end
+class E verde;
+
+subgraph C [CLOUD - Servidor NAIRA]
+    C1[Broker MQTT y API]
+    C2[Bases de datos]
+    C3[Dashboard y monitoreo]
+    C4[Modelos avanzados IA]
+    subgraph I [IA hibrida]
+    H1[Coordinacion de modelos]
+    H2[Recomendaciones]
+    end
+    
+end
+class C verde-medio;
+class I verde;
+
+subgraph R [Riego]
+    R5[Control de riego]
+end
+class R verde-oscuro;
+
+class A1,A2,A3,A4,A5,A6,A7 arena;
+class B1,B2,B3,B4,B6 arena;
+class C1,C2,C3,C4 arena;
+class H1,H2 arena;
+class R5 arena;
+
+A1 --> B1
+A2 --> B1
+A3 --> B1
+A4 --> B1
+A5 --> B1
+A6 --> B1
+A7 --> B1
+
+B1 --> B2
+B2 --> B3
+B3 --> B4
+B4 --> R5
+
+B2 --> B6
+B4 --> B6
+
+B6 --> C1
+C1 --> C2
+C2 --> C3
+C2 --> C4
+
+C4 --> I
+I --> C3
+
+I --> R5

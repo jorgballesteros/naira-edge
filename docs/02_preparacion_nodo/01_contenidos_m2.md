@@ -5,10 +5,9 @@ Configurar la Raspberry Pi 4 como nodo edge NAIRA para agricultura.
 ## Contenido
   * Instalación Raspberry Pi OS Lite, SSH y seguridad básica (firewall + fail2ban).
   * Configuración de buses de sensores:
-     * I2C → clima (T/H), suelo (CE/pH), tensiómetros digitales.
-     * UART → sondas NPK/Nutrientes.
-     * SPI → cámaras o sensores avanzados.
      * RS485/Modbus → tensiómetro, caudalímetro, PLC de riego.
+     * I2C → tensiómetros digitales.
+     * SPI → cámaras o sensores avanzados.
   * Conectividad en campo:
      * WiFi + 4G (failover).
      * Diagnóstico de red.

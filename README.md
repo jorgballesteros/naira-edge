@@ -42,26 +42,26 @@ El curso trabaja sobre datos reales/simulados provenientes de:
 ### **Estación meteorológica**
 - Temperatura aire  
 - Humedad aire  
-- Radiación solar (API)
-- Pluviómetro (API)
-- Dirección y velocidad del viento (API)
+- Radiación solar
+- Pluviómetro
+- Dirección y velocidad del viento
 
 ### **Suelo**
-- Tensiómetros a 10 y 30 cm
 - Humedad de suelo  
-- Temperatura de suelo  (opcional)
-- pH y conductividad eléctrica (CE) (opcional)  
+- Temperatura de suelo
+- pH y conductividad eléctrica (CE)  
+- Tensiómetros a 10 y 30 cm (opcional)
 
 ### **Cultivo** 
-- Cámara VGA  
-- Sensor multiespectral  
+- Cámara VGA (opcional)
+- Sensor multiespectral (opcional)
 
 ### **Riego**
 - Caudal / cantidad de agua  
 
 ### **Diagnóstico del nodo**
 - Temperatura interna  
-- Tensión de la batería  
+- Tensión de la batería (opcional)
 
 Estos datos se utilizan para ejercicios de adquisición, analítica local e integración con IA.
 

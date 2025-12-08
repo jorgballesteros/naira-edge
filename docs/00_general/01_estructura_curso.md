@@ -8,7 +8,7 @@ Diseñar el flujo sensor → Raspberry Pi → analítica → nube → agente IA.
   * Edge Computing: casos de uso en agricultura (humedad, clima, riego, diagnóstico).
   * Limitaciones reales: conectividad, energía, estabilidad, calor.
   * Integración con NAIRA: 
-     * Estación meteo
+     * Estación Meteo
      * Suelo
      * Cultivo
      * Riego
@@ -28,9 +28,7 @@ Configurar la RPi como nodo de computación para agricultura.
   * Raspberry Pi OS Lite, SSH, firewall, fail2ban.
   * Docker + contenedores para servicios edge.
   * Configuración de buses de sensores:
-     * I2C → humedad aire, temperatura aire, pH/CE.
      * SPI → sensores hiperespectrales básicos.
-     * UART → NPK, algunas sondas multiparamétricas.
      * Modbus RS485 → tensiómetro, caudalímetros.
   * Monitorización local:
      * Temperatura interna del nodo.

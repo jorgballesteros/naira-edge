@@ -1,7 +1,7 @@
 # Guion docente — Módulo 2. Preparación y diagnóstico del nodo
 
-Duración estimada: 3–4 horas (ajustable según ritmo del grupo).  
-Modalidad: Preferentemente **práctica** con una Raspberry Pi por grupo o parejas.
+Duración estimada: 3–4 horas.
+Modalidad: Preferentemente **práctica** con una Raspberry Pi por persona o pareja.
 
 ---
 
