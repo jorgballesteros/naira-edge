@@ -8,7 +8,7 @@ Modalidad: Preferentemente **práctica** con una Raspberry Pi por persona o pare
 ## 0. Antes de la sesión
 
 - Comprobar que se dispone de:
-  - 1 Raspberry Pi 4 por grupo (o al menos 1 por cada 3–4 personas).
+  - 1 Raspberry Pi 4 por grupo (o al menos 1 por cada 2-3 personas).
   - Tarjeta microSD preparada o lista para flashear.
   - Fuente de alimentación adecuada.
   - Al menos un sensor sencillo (temperatura/humedad, o similar).

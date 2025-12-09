@@ -368,7 +368,7 @@ Con estos pasos completados, la Raspberry Pi está:
 
 ### 2.4. Configuración de red: WiFi y 4G
 
-- Configuración de WiFi:
+- Configuración de WiFi: Este paso es opcional si previamente has configurado al conectiviad wifi en el instalador
   - Fichero de configuración (`wpa_supplicant.conf` o herramientas equivalentes).
   - Comprobación de IP y conectividad (`ip a`, `ping`).
 - Introducción a 4G:
@@ -386,40 +386,440 @@ Con estos pasos completados, la Raspberry Pi está:
 
 - Preparación del entorno Python:
   - Instalación de Python y `pip` (si no vienen por defecto).
+  Para instalar **pip** en una Raspberry Pi (Raspberry Pi OS o cualquier distro basada en Debian), usa este procedimiento seguro y actualizado.
+    1. Actualiza los paquetes
+
+    ```bash
+    sudo apt update
+    ```
+
+    2. Instala pip para Python 3
+
+    ```bash
+    sudo apt install python3-pip -y
+    ```
+
+    3. Verifica la instalación
+
+    ```bash
+    pip3 --version
+    ```
+
+    Deberías ver algo como:
+
+    ```
+    pip 23.x.x from /usr/lib/python3/dist-packages (python 3.x)
+    ```
+    4. Alias para usar `pip` directamente (Opcional)
+
+    Si quieres poder escribir solo `pip`:
+
+    ```bash
+    echo 'alias pip=pip3' >> ~/.bashrc
+    source ~/.bashrc
+    ```
+
+    ---
+
+    5. Instalar herramientas útiles (Opcional)
+
+    Si vas a trabajar con entornos virtuales:
+
+    ```bash
+    sudo apt install python3-venv python3-dev -y
+    ```
   - Creación de entorno virtual para el proyecto del nodo.
-  - Instalación de librerías básicas:
-    - `requests` (para APIs),
-    - librería de sensores (según ejemplo que se use),
-    - herramientas opcionales (p.ej. `gpiozero`).
+  Perfecto, te dejo un **procedimiento limpio, reproducible y adecuado para un nodo NAIRA** en Raspberry Pi, donde vas a usar Python para leer sensores, publicar MQTT, consumir APIs, etc.
+
+  1. Crear el entorno virtual e instalar librerías:
+
+  Desde el directorio `~/naira`:
+
+  ```bash
+  cd ~/naira
+  python3 -m venv venv
+  ```
+  Esto crea el entorno en `~/naira/venv/`.
+
+  2. Activar el entorno virtual
+
+  ```bash
+  source ~/naira/venv/bin/activate
+  ```
+  Si funciona, el prompt debe mostrar:
+
+  ```
+  (venv) pi@naira:~/naira $
+  ```
+
+  3. Actualizar pip dentro del entorno
+
+  ```bash
+  pip install --upgrade pip
+  ```
+  4. Instalar dependencias del nodo
+
+  Para un nodo típico NAIRA (sensores, MQTT, APIs, tiempo real, etc.) te recomiendo este conjunto inicial:
+
+  ```bash
+  pip install paho-mqtt requests pyserial python-dotenv
+  ```
+
+  Si también usarás Modbus/RS-485:
+
+  ```bash
+  pip install pymodbus
+  ```
+
+  Si necesitas un scheduler ligero:
+
+  ```bash
+  pip install schedule
+  ```
+
+  Si procesarás datos localmente:
+
+  ```bash
+  pip install pandas
+  ```
+  5. Congelar dependencias
+
+  Crear o actualizar `requirements.txt`:
+
+  ```bash
+  pip freeze > requirements.txt
+  ```
+  Esto permite:
+
+  * replicar el entorno en otros nodos,
+  * reconstruirlo en caso de fallo,
+  * garantizar reproducibilidad.
+
+  6. Desactivar el entorno
+
+  Cuando termines:
+
+  ```bash
+  deactivate
+  ```
 - Organización del proyecto:
-  - Estructura de carpetas recomendada (`/home/pi/naira_nodo/…`).
+  - Estructura de carpetas recomendada (`/home/naira/naira_nodo/…`).
+  ```
+  - main.py – Servicio principal del nodo
+  - acquisition/ – Lectura periódica de sensores RS485
+  - processing/ – Limpieza, resampling, indicadores agronómicos
+  - models/ – Inferencia con modelos ONNX/TinyML
+  - comms/ – MQTT, HTTP, almacenamiento offline
+  - control/ – Lógica de actuadores (electroválvulas, relés)
+  - diagnostics/ – Temperatura, batería, watchdog, logs
+  ```
   - Ficheros de configuración (por ejemplo `config.yaml` o `.env` sencillo).
 
 ### 2.6. Lectura y diagnóstico de sensores de campo
 
-- Comprobaciones de bajo nivel:
-  - Detección de dispositivos I2C (`i2cdetect`).
-  - Verificación de permisos para acceso a GPIO.
-- Script sencillo de lectura de un sensor:
-  - Leer un valor de ejemplo (temperatura, humedad,…).
-  - Mostrar por pantalla, guardar en log o JSON.
-- Validación básica de datos:
-  - Rangos razonables (ej. temperatura 0–60 ºC, humedad 0–100 %).
-  - Gestión de errores (sensor desconectado, lecturas nulas, etc.).
+*(Arduino → Serial → Raspberry Pi)*
+
+En esta sección aprenderás a integrar en la Raspberry Pi un conjunto de sensores que no pueden conectarse directamente al GPIO por ser **analógicos**. Para ello utilizamos un **Arduino como módulo ADC**, que adquiere los datos, los procesa mínimamente y los envía a la Raspberry Pi mediante **Serial USB**.
+
+Este esquema es muy común en agricultura de precisión de bajo coste y facilita:
+
+* aislar eléctricamente los sensores analógicos,
+* simplificar el cableado,
+* leer múltiples sensores sin necesidad de un MCP3008 o ADS1115,
+* delegar en la Raspberry únicamente el procesado, almacenamiento e IA.
+
+
+#### **2.6.1 Arquitectura de lectura**
+
+```
+┌──────────────┐     USB Serial      ┌─────────────────────┐
+│   Sensores    │  →→→→→→→→→→→→→→→→  │   Raspberry Pi       │
+│  TMP36 (Tª)   │                     │  Nodo NAIRA          │
+│  Fototransistor│                    │  - Parser Serial      │
+│  Conductividad │                    │  - Validación         │
+│  (Moisture)    │                    │  - Diagnóstico        │
+└──────┬────────┘                     │  - Publicación datos  │
+       │ Analógico                    └───────────────────────┘
+┌──────▼────────┐
+│    Arduino     │
+│  (ADC + loop)  │
+└────────────────┘
+```
+
+Cada segundo, el Arduino envía tres líneas de texto estructurada.
+Ejemplo típico:
+
+```
+temperature 23.5
+light 4.0
+moisture 356.0
+```
+
+Donde:
+
+* `temperature` → temperatura TMP36 (°C)
+* `light` → nivel de luz (fototransistor, valor 0–1023 o normalizado)
+* `moisture` → humedad o conductividad del suelo (0–1 o escala arbitraria)
+
+#### **2.6.2 Firmware básico del Arduino**
+
+Un ejemplo funcional:
+
+```cpp
+int lightPin = A0; /*the analog pin the light sensor is connected to */  
+int tempPin = A1; /*the analog pin the TMP36's Vout (sense) pin is connected to */  
+int moisturePin = A2;  
+/* Set this threshold accordingly to the resistance you used */  
+/* The easiest way to calibrate this value is to test the sensor in both dry and wet earth */   
+void setup() {  
+ /* Initialize serial and wait for port to open: */  
+ Serial.begin(9600);  
+ /* This delay gives the chance to wait for a Serial Monitor without blocking if none is found */  
+ delay(1500);    
+}  
+void loop() {  
+ //ArduinoCloud.update();  
+ float light = analogRead(lightPin); /* assign light variable to light sensor values */  
+ Serial.print("light ");  
+ Serial.println(light);
+ 
+ float temperature = get_temperature(); /* assign temperature variable to temperature in Celsius */  
+ Serial.print("temperature ");  
+ Serial.println(temperature);  
+  
+ int moisture = get_average_moisture();
+ Serial.print("moisture ");  
+ Serial.println(moisture);
+}
+
+...
+```
+
+El código completo está en la carpeta [acquisition](../../src/acquisition) del repositorio.
+
+#### **2.6.3 Lectura desde la Raspberry Pi (Serial USB)**
+
+En la Raspberry Pi, identificamos el puerto USB:
+
+```bash
+ls /dev/ttyACM*
+ls /dev/ttyUSB*
+```
+
+Normalmente:
+
+* `/dev/ttyACM0` → Arduino Leonardo / Micro / Due
+* `/dev/ttyUSB0` → Arduino Uno / Nano clon
+
+Instala pyserial:
+
+```bash
+pip install pyserial
+```
+
+Se ha generado un script para cada dato, en el caso de temperatura **`temp_serial.py`**:
+
+```python
+import serial
+
+# Ajusta el puerto si hace falta: suele ser /dev/ttyACM0 o /dev/ttyUSB0
+PORT = "/dev/ttyACM0"
+BAUDRATE = 9600
+
+def main():
+    with serial.Serial(PORT, BAUDRATE, timeout=2) as ser:
+        print(f"Leyendo temperatura desde {PORT}...")
+        while True:
+            line = ser.readline().decode("utf-8", errors="ignore").strip()
+            if not line:
+                print("WARN: No se reciben datos del Arduino")
+                continue
+
+            # Esperamos líneas del tipo: temperature 23.45
+            if line.startswith("temperature"):
+                try:
+                    temp_str = line.split("temperature ")[1]
+                    temp_c = float(temp_str)
+                    print(f"Temperatura: {temp_c:.2f} °C")
+                except ValueError:
+                    # línea malformada, la ignoramos
+                    pass
+
+if __name__ == "__main__":
+    main()
+
+```
+
+#### **2.6.4 Validación y límites aceptables**
+
+La Pi debe asegurar que las lecturas tienen sentido agronómico antes de procesarlas.
+Ejemplo de validación:
+
+```python
+  if not (0 <= datos["T"] <= 60):
+    ok = False
+    errores.append("Temperatura fuera de rango")
+
+
+```
+---
+
+#### **2.6.5 Comprobaciones rápidas en campo**
+
+Checklist para garantizar que la adquisición funciona:
+
+| Comprobación      | Comando / Método           | Estado esperado     |
+| ----------------- | -------------------------- | ------------------- |
+| Arduino detectado | `ls /dev/ttyACM*`          | Puerto presente     |
+| Flujo serial      | `screen /dev/ttyACM0 9600` | Datos legibles      |
+| Formato correcto  | `T:x;L:x;M:x`              | Sin cortes ni ruido |
+| Temperatura       | Mano sobre sensor          | Variación inmediata |
+| Luz               | Tapar fototransistor       | Decrece             |
+| Conductividad     | Mojar sonda                | Aumenta             |
 
 ### 2.7. Monitorización y diagnóstico del nodo
 
-- Indicadores de salud del sistema:
-  - Uso de CPU y RAM (`top`, `htop`, `free -h`).
-  - Espacio en disco (`df -h`).
-  - Temperatura de la CPU (comando específico de Raspberry Pi).
+- Indicadores de salud del sistema: *(CPU, RAM, disco y temperatura de la Raspberry Pi)*
+  Además de leer sensores externos (temperatura, luz, humedad/CE), es fundamental que el nodo NAIRA supervise **su propio estado interno**. Esto permite:
+
+  * detectar sobrecarga o bloqueos,
+  * saber si el nodo corre riesgo de apagarse o sobrecalentarse,
+  * registrar anomalías relacionadas con fallos de hardware,
+  * planificar mantenimiento y optimizar energía en modo solar/batería.
+
+  **Uso de CPU en tiempo real**
+
+  ```bash
+  top
+  ```
+
+  Pulsando:
+
+  * `1` → muestra carga por núcleo
+  * `q` → salir
+
+  Más visual:
+
+  ```bash
+  htop
+  ```
+
+  > Si no está instalado:
+
+  ```bash
+  sudo apt install htop
+  ```
+
+  **Consultar memoria RAM disponible**
+
+  ```bash
+  free -h
+  ```
+
+  Salida típica:
+
+  ```
+                total        used        free      shared  buff/cache   available
+  Mem:          3.7Gi       512Mi       2.5Gi       8.0Mi       700Mi       3.1Gi
+  ```
+
+  **Espacio en disco**
+
+  Para comprobar si la tarjeta SD está llena:
+
+  ```bash
+  df -h
+  ```
+
+  Ejemplo:
+
+  ```
+  Filesystem      Size  Used Avail Use% Mounted on
+  /dev/root        29G  3.1G   24G  12% /
+  ```
+
+  Indicadores importantes:
+
+  * `Avail`: espacio disponible
+  * `Use%`: si supera el **80 %** puede causar fallos o bloqueos
+  
+  **Temperatura de la CPU**
+
+  La Raspberry Pi incorpora un sensor interno.
+  Comando oficial:
+
+  ```bash
+  vcgencmd measure_temp
+  ```
+
+  Salida típica:
+
+  ```
+  temp=48.3'C
+  ```
+
+  Valores orientativos:
+
+  | Temperatura | Estado                                            |
+  | ----------- | ------------------------------------------------- |
+  | < 60 ºC     | Normal                                            |
+  | 60–70 ºC    | Carga alta sostenida                              |
+  | > 80 ºC     | Riesgo de *thermal throttling* (baja rendimiento) |
+  | > 85 ºC     | Crítico: el sistema puede ralentizarse o apagarse |
+
+  Es importante registrar esta variable cuando:
+
+  * la Pi está al sol,
+  * se ejecutan modelos IA TinyML en CPU,
+  * se instalan cajas estancas sin ventilación,
+  * el nodo funciona en verano en campo real.
+
+  **Interpretación y alertas básicas**
+
+  Puedes aplicar reglas simples:
+
+  * **CPU > 90 % durante 60 s** → riesgo de bloqueo.
+  * **RAM < 200 MB** → procesos intensivos pueden fallar.
+  * **Disco < 1 GB** → riesgo de corrupción / imposibilidad de loguear.
+  * **CPU > 75 ºC** → revisar ventilación o carga del sistema.
+
+  Estas reglas formarán parte del **diagnóstico NAIRA** en módulos siguientes.
+
 - Creación de un script de diagnóstico:
   - Comprobar conectividad a Internet (p. ej. `ping` a una URL).
-  - Consultar una API externa de prueba y reportar estado.
-  - Generar un resumen en formato JSON con:
-    - estado de red,
-    - carga del sistema,
-    - últimas lecturas de sensores.
+  - Comprueba valores de Yemperatura y CPU
+  ```python
+    import psutil, subprocess, json
+
+    def diagnostico_nodo():
+        temp_cpu = float(
+            subprocess.check_output(["vcgencmd","measure_temp"])
+            .decode()
+            .replace("temp=","")
+            .replace("'C","")
+        )
+
+        return {
+            "cpu_pct": psutil.cpu_percent(),
+            "mem_mb": psutil.virtual_memory().available / 1024 / 1024,
+            "temp_cpu": temp_cpu,
+        }
+
+    while True:
+        info = {
+            "timestamp": time.time(),
+            "nodo": diagnostico_nodo()
+        }
+
+        print(json.dumps(info, indent=2))
+    ```
+
+    Esto produce un JSON listo para:
+
+    * MQTT
+    * almacenamiento local
+    * envío al backend NAIRA
+    * análisis en módulos posteriores
 - Opciones de automatización:
   - Ejecución periódica con `cron` o `systemd`.
   - Registro en fichero de log.
@@ -437,7 +837,7 @@ Con estos pasos completados, la Raspberry Pi está:
 - Aplicación al contexto NAIRA:
   - Uso de datos externos (meteorología, previsión de riego, etc.) para enriquecer la información del nodo.
 
-### 2.9. Buenas prácticas y checklist de despliegue
+## 3. Buenas prácticas y checklist de despliegue
 
 - Checklist de nodo listo para campo:
   - OS actualizado, credenciales cambiadas.
