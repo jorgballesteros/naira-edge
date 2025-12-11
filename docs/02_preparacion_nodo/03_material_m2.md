@@ -1063,10 +1063,69 @@ Checklist para garantizar que la adquisición funciona:
     return alerts
     ```
     El código completo está disponible en (../src/diagnostics/node_nomitor.py)
-    
+
 - Opciones de automatización:
   - Ejecución periódica con `cron` o `systemd`.
   - Registro en fichero de log.
+  Perfecto, vamos a dejarlo programado cada 10 minutos con `cron`.
+
+    1. Localiza la ruta de Python y del script
+
+    En la RPi:
+
+    ```bash
+    which python3
+    ```
+
+    Te dará algo tipo:
+
+    ```bash
+    /usr/bin/python3
+    ```
+
+    Supongamos que guardaste el script en:
+
+    ```bash
+    /home/pi/rpi_monitor.py
+    ```
+
+    (Ajusta la ruta si está en otra carpeta.)
+
+    ---
+
+    2. Edita el crontab del usuario `pi`
+
+    ```bash
+    crontab -e
+    ```
+
+    Si te pregunta editor, elige `nano` para ir fácil.
+
+    ---
+
+    3. Añade esta línea al final
+
+    Esto ejecuta el script **cada 10 minutos** y guarda la última salida JSON en un fichero:
+
+    ```cron
+    */10 * * * * /usr/bin/python3 /home/pi/rpi_monitor.py > /home/pi/rpi_monitor_last.json 2>&1
+    ```
+
+    * `*/10 * * * *` → cada 10 minutos
+    * `> /home/pi/rpi_monitor_last.json` → sobrescribe el fichero con la última medición
+    * `2>&1` → redirige errores al mismo fichero (útil para depurar)
+
+    Guarda y cierra (`Ctrl+O`, Enter, `Ctrl+X` en nano).
+
+    ---
+
+    4. Verificar que cron lo ha aceptado
+
+    Lista las tareas:
+
+    ```bash
+    crontab -l
+    ```
 
 ### 2.8. Acceso a una API desde el nodo
 
@@ -1077,7 +1136,131 @@ Checklist para garantizar que la adquisición funciona:
 - Ejemplo práctico:
   - Consumir una API sencilla (por ejemplo, meteorología, hora mundial, etc.).
   - Parsear la respuesta y extraer campos relevantes.
-  - Combinar datos de sensores con datos de la API en un mismo JSON.
+  Perfecto, vamos a hacer justo eso: llamar a una API sencilla, parsear la respuesta y guardar un JSON “limpio” con solo los campos que te interesan.
+
+    1. Script de ejemplo: consumir API y guardar JSON
+
+    Guarda esto como `api_worldtime.py`:
+
+    ```python
+    #!/usr/bin/env python3
+    """
+    Ejemplo sencillo:
+    - Consume una API pública (WorldTimeAPI).
+    - Parsea la respuesta JSON.
+    - Extrae campos relevantes.
+    - Guarda el resultado en un fichero JSON.
+    """
+
+    import json
+    from datetime import datetime
+    import requests  # pip install requests
+
+    # Configuración
+    TIMEZONE = "Atlatinc/Canary"  # cámbialo si quieres otra zona horaria
+    API_URL = f"https://worldtimeapi.org/api/timezone/{TIMEZONE}"
+    OUTPUT_FILE = "/home/pi/worldtime_last.json"  # ajusta ruta si quieres
+
+
+    def fetch_time_data() -> dict:
+        """Llama a la API y devuelve el JSON original (dict)."""
+        resp = requests.get(API_URL, timeout=10)
+        resp.raise_for_status()  # lanza error si el status code no es 2xx
+        return resp.json()
+
+
+    def build_clean_payload(raw: dict) -> dict:
+        """
+        Construye un JSON "limpio" con sólo los campos relevantes
+        de la respuesta de WorldTimeAPI.
+        """
+        return {
+            "timestamp_local": raw.get("datetime"),
+            "timezone": raw.get("timezone"),
+            "abbreviation": raw.get("abbreviation"),
+            "unixtime": raw.get("unixtime"),
+            "day_of_week": raw.get("day_of_week"),
+            "day_of_year": raw.get("day_of_year"),
+            "week_number": raw.get("week_number"),
+            "dst": raw.get("dst"),
+            "raw_offset": raw.get("raw_offset"),
+            "dst_offset": raw.get("dst_offset"),
+            # Metadata de la captura
+            "meta": {
+                "source": "worldtimeapi.org",
+                "api_url": API_URL,
+                "collected_at_utc": datetime.utcnow().isoformat() + "Z",
+            },
+        }
+
+
+    def main():
+        try:
+            raw = fetch_time_data()
+            clean_payload = build_clean_payload(raw)
+
+            # Guardar en fichero JSON
+            with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+                json.dump(clean_payload, f, indent=2, ensure_ascii=False)
+
+            # También lo mostramos por stdout (útil para Node-RED o logs)
+            print(json.dumps(clean_payload, indent=2, ensure_ascii=False))
+
+        except Exception as e:
+            # En un sistema real, aquí podrías:
+            # - Escribir en syslog
+            # - Enviar alerta a MQTT/HTTP
+            error_payload = {
+                "status": "error",
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "api_url": API_URL,
+                "collected_at_utc": datetime.utcnow().isoformat() + "Z",
+            }
+            print(json.dumps(error_payload, indent=2, ensure_ascii=False))
+
+
+    if __name__ == "__main__":
+        main()
+    ```
+    
+    2. Instalar dependencia (`requests`)
+
+    En la RPi:
+
+    ```bash
+    sudo apt install python3-pip -y
+    pip3 install requests
+    ```
+    
+    3. Probar el script
+
+    ```bash
+    python3 /home/pi/api_worldtime.py
+    ```
+
+    Deberías ver algo así por pantalla (y en `/home/pi/worldtime_last.json`):
+
+    ```json
+    {
+      "timestamp_local": "2025-12-11T16:45:12.123456+00:00",
+      "timezone": "Europe/London",
+      "abbreviation": "GMT",
+      "unixtime": 1764847512,
+      "day_of_week": 4,
+      "day_of_year": 345,
+      "week_number": 50,
+      "dst": false,
+      "raw_offset": 0,
+      "dst_offset": 0,
+      "meta": {
+        "source": "worldtimeapi.org",
+        "api_url": "https://worldtimeapi.org/api/timezone/Europe/London",
+        "collected_at_utc": "2025-12-11T16:45:12.456789Z"
+      }
+    }
+    ```
+
 - Aplicación al contexto NAIRA:
   - Uso de datos externos (meteorología, previsión de riego, etc.) para enriquecer la información del nodo.
 
