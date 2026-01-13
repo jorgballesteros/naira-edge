@@ -436,20 +436,20 @@ Con estos pasos completados, la Raspberry Pi está:
   Desde el directorio `~/naira`:
 
   ```bash
-  cd ~/naira
+  cd ~/naira-edge
   python3 -m venv venv
   ```
-  Esto crea el entorno en `~/naira/venv/`.
+  Esto crea el entorno en `~/naira-edge/venv/`.
 
   2. Activar el entorno virtual
 
   ```bash
-  source ~/naira/venv/bin/activate
+  source venv/bin/activate
   ```
   Si funciona, el prompt debe mostrar:
 
   ```
-  (venv) pi@naira:~/naira $
+  (venv) pi@naira:~/naira-edge $
   ```
 
   3. Actualizar pip dentro del entorno

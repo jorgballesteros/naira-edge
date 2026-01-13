@@ -1,6 +1,6 @@
 # Edge Computing para la Gestión de Cultivos
 
-Este repositorio contiene los materiales, código, documentación y ejercicios del **Curso 3: Edge Computing para la Gestión de Cultivos**, desarrollado en el marco del proyecto **NAIRA – Sistema de inteligencia aplicada para la transformación circular del sector agroalimentario**.
+Este repositorio contiene los materiales, código, documentación y ejercicios del **Curso Edge Computing para la Gestión de Cultivos**, desarrollado en el marco del proyecto **NAIRA – Sistema de inteligencia aplicada para la transformación circular del sector agroalimentario**.
 
 El curso enseña a diseñar, desplegar y operar **nodos de computación en el borde (edge)** basados en Raspberry Pi para procesar datos agrícolas en tiempo real y soportar la toma de decisiones inteligente en cultivos.
 
