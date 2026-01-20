@@ -8,7 +8,7 @@ Ejemplo sencillo:
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, UTC
 import requests  # pip install requests
 
 # Configuración
