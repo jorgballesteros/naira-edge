@@ -11,7 +11,7 @@ import platform
 import socket
 import subprocess
 import time
-from datetime import datetime
+from datetime import datetime, UTC
 
 import psutil  # pip install psutil
 
@@ -168,7 +168,7 @@ def collect_metrics() -> dict:
     load_ratio = load1 / cpu_count if cpu_count else 0.0
 
     metrics = {
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "") + "Z",
         "hostname": socket.gethostname(),
         "platform": platform.platform(),
         "cpu": {
