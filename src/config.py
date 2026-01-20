@@ -16,6 +16,9 @@ class Settings:
     mqtt_broker: str = os.getenv("NAIRA_MQTT_BROKER", "localhost:1883")
     report_interval_s: int = int(os.getenv("NAIRA_REPORT_INTERVAL", "60"))
     sim_mode: bool = os.getenv("NAIRA_SIM", "1") in ("1", "true", "True")
+    # Telegram alertas
+    telegram_bot_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    telegram_chat_id: str = os.getenv("TELEGRAM_CHAT_ID", "")
 
 
 def load_settings() -> Settings:
