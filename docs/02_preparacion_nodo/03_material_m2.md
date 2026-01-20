@@ -955,7 +955,7 @@ Checklist para garantizar que la adquisición funciona:
         load_ratio = load1 / cpu_count if cpu_count else 0.0
 
         metrics = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(datetime.UTC).isoformat().replace("+00:00", "") + "Z",
             "hostname": socket.gethostname(),
             "platform": platform.platform(),
             "cpu": {
@@ -1189,7 +1189,7 @@ Checklist para garantizar que la adquisición funciona:
             "meta": {
                 "source": "worldtimeapi.org",
                 "api_url": API_URL,
-                "collected_at_utc": datetime.utcnow().isoformat() + "Z",
+                "collected_at_utc": datetime.now(datetime.UTC).isoformat().replace("+00:00", "") + "Z",
             },
         }
 

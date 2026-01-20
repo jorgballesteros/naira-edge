@@ -85,7 +85,7 @@ flowchart LR
     Driver --> Normalizacion
     Normalizacion --> Almacenamiento
     Normalizacion --> Logs
-````
+```
 
 ---
 
