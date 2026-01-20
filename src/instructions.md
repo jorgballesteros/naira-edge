@@ -167,3 +167,33 @@ Entregar métricas también con el contrato estándar (source=`diagnostics`).
 * [ ] Logs claros (sin spam).
 * [ ] Código modular (acquisition/processing/comms/control separados).
 * [ ] Documentado: cómo ejecutar y variables de config.
+
+---
+
+## 13) Documentación y archivos de ayuda (README/guías)
+
+**Principio:** documentación **corta, directa y centralizada por carpeta**.
+
+* Un único archivo `README.md` por carpeta principal (`acquisition/`, `processing/`, `comms/`, `control/`, `diagnostics/`).
+* Formato: **máximo 100–150 líneas** por `README.md`.
+* Estructura recomendada:
+  ```
+  # [Nombre módulo]
+  
+  ## Qué hace
+  (1–2 párrafos breves)
+  
+  ## Uso
+  (1–3 ejemplos de código)
+  
+  ## Configuración
+  (variables de entorno o parámetros clave)
+  
+  ## Troubleshooting
+  (problemas comunes y soluciones rápidas)
+  ```
+* Evitar: repetir docs en múltiples archivos, explicaciones largas (enlazar a `docs/` si es necesario).
+* Archivos de referencia técnica larga (`DESIGN.md`, `SPECIFICATIONS.md`) van en `docs/`, no en la carpeta del módulo.
+* **Todos los ejemplos deben ejecutarse en modo simulado** (`--sim`).
+
+```
