@@ -19,6 +19,12 @@ class Settings:
     # Telegram alertas
     telegram_bot_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
     telegram_chat_id: str = os.getenv("TELEGRAM_CHAT_ID", "")
+    # InfluxDB
+    influx_enabled: bool = os.getenv("NAIRA_INFLUX_ENABLED", "0") in ("1", "true", "True")
+    influx_url: str = os.getenv("NAIRA_INFLUX_URL", "")
+    influx_token: str = os.getenv("NAIRA_INFLUX_TOKEN", "")
+    influx_org: str = os.getenv("NAIRA_INFLUX_ORG", "")
+    influx_bucket: str = os.getenv("NAIRA_INFLUX_BUCKET", "")
 
 
 def load_settings() -> Settings:
