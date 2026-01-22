@@ -14,6 +14,8 @@ from datetime import datetime, UTC
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from .influx import get_influx_sink
+
 logger = logging.getLogger(__name__)
 
 # Ruta por defecto de la base de datos
@@ -32,6 +34,7 @@ class SensorDatabase:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize_db()
+        self.influx = get_influx_sink()
 
     def _initialize_db(self) -> None:
         """Crea tablas si no existen."""
@@ -140,6 +143,7 @@ class SensorDatabase:
                 conn.commit()
                 row_id = cursor.lastrowid
                 logger.debug(f"Muestra insertada: ID={row_id}, metric={sample.get('metric')}")
+                self._replicate_sample(sample)
                 return row_id
         except sqlite3.Error as e:
             logger.error(f"Error insertando muestra: {e}")
@@ -158,6 +162,7 @@ class SensorDatabase:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 inserted = 0
+                successful_samples: List[Dict] = []
                 for sample in samples:
                     try:
                         cursor.execute("""
@@ -174,12 +179,14 @@ class SensorDatabase:
                             sample.get("quality", "ok")
                         ))
                         inserted += 1
+                        successful_samples.append(sample)
                     except sqlite3.Error as e:
                         logger.warning(f"Error insertando muestra individual: {e}")
                         continue
                 
                 conn.commit()
                 logger.info(f"Lote insertado: {inserted} de {len(samples)} muestras")
+                self._replicate_samples(successful_samples)
                 return inserted
         except sqlite3.Error as e:
             logger.error(f"Error en inserción por lotes: {e}")
@@ -222,7 +229,9 @@ class SensorDatabase:
                     status_data.get("uptime_s")
                 ))
                 conn.commit()
-                return cursor.lastrowid
+                row_id = cursor.lastrowid
+                self._replicate_device_status(node_id, status_data)
+                return row_id
         except sqlite3.Error as e:
             logger.error(f"Error insertando estado: {e}")
             raise
@@ -416,6 +425,36 @@ class SensorDatabase:
         except sqlite3.Error as e:
             logger.error(f"Error eliminando muestras antiguas: {e}")
             return 0
+
+    def _replicate_sample(self, sample: Dict) -> None:
+        if not self.influx:
+            logger.debug("Replicación Influx omitida: sink no disponible")
+            return
+        try:
+            logger.info("Replicando muestra a Influx: %s", sample.get("metric"))
+            self.influx.write_sample(sample)
+        except Exception as exc:
+            logger.warning(
+                "Replicación a Influx falló para %s: %s",
+                sample.get("metric", "unknown"),
+                exc,
+            )
+
+    def _replicate_samples(self, samples: List[Dict]) -> None:
+        if not self.influx or not samples:
+            return
+        try:
+            self.influx.write_samples(samples)
+        except Exception as exc:
+            logger.warning("Replicación en lote a Influx falló: %s", exc)
+
+    def _replicate_device_status(self, node_id: str, status_data: Dict) -> None:
+        if not self.influx:
+            return
+        try:
+            self.influx.write_device_status(node_id, status_data)
+        except Exception as exc:
+            logger.warning("Replicación de estado a Influx falló: %s", exc)
 
     def close(self) -> None:
         """Cierra la conexión (si la hay abierta)."""

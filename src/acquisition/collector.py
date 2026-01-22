@@ -10,7 +10,21 @@ import logging
 from datetime import datetime, UTC
 from typing import Dict, Optional
 
-from .db import get_database
+try:
+    from .db import get_database
+except ImportError:  # Permite ejecutar "python collector.py" desde src/acquisition
+    import sys
+    from pathlib import Path
+
+    src_root = Path(__file__).resolve().parents[1]
+    if str(src_root) not in sys.path:
+        sys.path.append(str(src_root))
+    from acquisition.db import get_database
+
+import pathlib
+from pathlib import Path
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 logger = logging.getLogger(__name__)
 
