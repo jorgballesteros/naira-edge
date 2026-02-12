@@ -7,7 +7,16 @@ from datetime import datetime
 import psutil
 import streamlit as st
 
-from .telegram_alert import create_alert_manager
+try:
+    from .telegram_alert import create_alert_manager
+except ImportError:  # Permite ejecutar "python diagnostics_app.py"
+    import sys
+    from pathlib import Path
+
+    src_root = Path(__file__).resolve().parents[1]
+    if str(src_root) not in sys.path:
+        sys.path.append(str(src_root))
+    from telegram_alert import create_alert_manager
 
 logger = logging.getLogger(__name__)
 
