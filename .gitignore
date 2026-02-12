@@ -226,3 +226,8 @@ __marimo__/
 
 # TODO files
 docs/TODO.md
+
+# Project-specific artifacts
+data/*.db
+data/**/*.db
+.github/
