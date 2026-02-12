@@ -16,6 +16,14 @@ class Settings:
     mqtt_broker: str = os.getenv("NAIRA_MQTT_BROKER", "localhost:1883")
     report_interval_s: int = int(os.getenv("NAIRA_REPORT_INTERVAL", "60"))
     sim_mode: bool = os.getenv("NAIRA_SIM", "1") in ("1", "true", "True")
+    # Almacenamiento de estado (SQLite)
+    state_store_enabled: bool = os.getenv("NAIRA_STATE_STORE_ENABLED", "1") in ("1", "true", "True")
+    sqlite_state_path: str = os.getenv(
+        "NAIRA_STATE_DB", "/home/naira/NAIRA/naira-edge/data/naira_state.db"
+    )
+    simulated_inventory_path: str = os.getenv("NAIRA_SIM_INVENTORY_PATH", "")
+    offline_queue_max_items: int = int(os.getenv("NAIRA_OFFLINE_QUEUE_MAX", "500"))
+    collector_interval_s: int = int(os.getenv("NAIRA_COLLECTOR_INTERVAL", "10"))
     # Telegram alertas
     telegram_bot_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
     telegram_chat_id: str = os.getenv("TELEGRAM_CHAT_ID", "")
@@ -25,6 +33,26 @@ class Settings:
     influx_token: str = os.getenv("NAIRA_INFLUX_TOKEN", "")
     influx_org: str = os.getenv("NAIRA_INFLUX_ORG", "")
     influx_bucket: str = os.getenv("NAIRA_INFLUX_BUCKET", "")
+    influx_bucket_telemetry: str = os.getenv(
+        "NAIRA_INFLUX_BUCKET_TELEMETRY",
+        os.getenv("NAIRA_INFLUX_BUCKET", ""),
+    )
+    influx_bucket_resources: str = os.getenv(
+        "NAIRA_INFLUX_BUCKET_RESOURCES",
+        os.getenv("NAIRA_INFLUX_BUCKET", ""),
+    )
+    influx_bucket_events: str = os.getenv(
+        "NAIRA_INFLUX_BUCKET_EVENTS",
+        os.getenv("NAIRA_INFLUX_BUCKET", ""),
+    )
+    influx_retry_interval_s: int = int(os.getenv("NAIRA_INFLUX_RETRY_INTERVAL", "10"))
+    # LLM / Ollama
+    ollama_host: str = os.getenv("NAIRA_OLLAMA_HOST", "127.0.0.1")
+    ollama_port: int = int(os.getenv("NAIRA_OLLAMA_PORT", "11434"))
+    ollama_model: str = os.getenv("NAIRA_OLLAMA_MODEL", "tinyllama")
+    ollama_timeout_s: float = float(os.getenv("NAIRA_OLLAMA_TIMEOUT", "30"))
+    ollama_pull_retries: int = int(os.getenv("NAIRA_OLLAMA_PULL_RETRIES", "2"))
+    ollama_retry_backoff_s: float = float(os.getenv("NAIRA_OLLAMA_RETRY_BACKOFF", "2"))
 
 
 def load_settings() -> Settings:
