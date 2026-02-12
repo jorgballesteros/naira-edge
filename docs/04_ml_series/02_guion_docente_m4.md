@@ -86,29 +86,18 @@ Acompañar paso a paso, explicar cada decisión de diseño.
 
 ---
 
-## Sesión 3 (opcional, 2-3 h) — LLMs ligeros y caso práctico final
+## Caso práctico final (sesión adicional opcional, 2-3 h)
 
-### 1. Introducción a LLMs ligeros (30 min)
-- ¿Qué es TinyLlama?
-- ¿Qué es Ollama?
-- Ejecución local vs APIs en la nube
-- Casos de uso en IoT: generación de alertas en lenguaje natural
-
-### 2. Ejercicio práctico: cliente Ollama (40 min)
-- Configurar Ollama en el entorno
-- Implementar `TinyLlamaClient`
-- Generar descripciones de anomalías detectadas
-- Discutir limitaciones (latencia, RAM)
-
-### 3. Caso práctico final (60-90 min)
 Sistema completo de detección:
 - Adquisición de datos de múltiples sensores
 - Almacenamiento en InfluxDB
 - Detección de anomalías (z-score / MAD)
 - Dashboard interactivo
-- Alertas opcionales (Telegram, logs)
+- Alertas básicas (Telegram, logs)
 
 Entrega:
 - Código documentado
 - Dashboard funcional
 - Informe breve explicando configuración y resultados
+
+**Nota:** la integración con LLMs ligeros para alertas en lenguaje natural se cubre en el Módulo 5.

@@ -10,7 +10,6 @@ Al finalizar el módulo, el alumnado será capaz de:
 - Integrar detectores con bases de datos de series temporales (InfluxDB).
 - Diseñar pipelines de procesamiento en tiempo real compatibles con edge computing.
 - Visualizar resultados de detección mediante dashboards interactivos.
-- Evaluar la viabilidad de LLMs ligeros (TinyLlama) en dispositivos IoT.
 
 ## Contenidos
 
@@ -44,18 +43,13 @@ Al finalizar el módulo, el alumnado será capaz de:
 - Configuración de umbrales en tiempo real
 - Exportación de resultados
 
-### 6. LLMs ligeros en edge (introducción)
-- TinyLlama y Ollama: ejecución local
-- Casos de uso: generación de explicaciones, alertas inteligentes
-- Limitaciones en Raspberry Pi
-- Trade-off entre precisión y viabilidad
-
 ## Relación con módulos anteriores
 - Depende del Módulo 3 (adquisición y normalización de datos)
 - Utiliza datos almacenados localmente o en InfluxDB
 - Sienta las bases para módulos avanzados de automatización y toma de decisiones
 
 ## Relación con módulos posteriores
-- Base para sistemas de alerta temprana
+- Base para sistemas de alerta temprana (Módulo 5: LLMs ligeros)
 - Integración con dashboards de monitoreo
 - Apoyo para optimización de recursos (agua, energía)
+- Los detectores se integran con LLMs ligeros para generar alertas en lenguaje natural (Módulo 5)

@@ -12,7 +12,6 @@ Al finalizar el módulo, el alumnado será capaz de:
 - Integrar detectores con bases de datos de series temporales (InfluxDB).
 - Construir pipelines completos: adquisición → almacenamiento → detección → visualización.
 - Evaluar y ajustar umbrales de detección según contexto aplicado.
-- Explorar el uso de LLMs ligeros para enriquecer sistemas IoT.
 
 ---
 
@@ -281,35 +280,6 @@ else:
 
 ---
 
-## 6. LLMs ligeros en edge (introducción)
-
-### ¿Qué es TinyLlama?
-- Modelo de lenguaje pequeño (~1.1B parámetros).
-- Puede ejecutarse en CPU (lento) o GPU pequeña.
-- Ideal para generar texto breve (alertas, explicaciones).
-
-### ¿Qué es Ollama?
-- Framework para ejecutar LLMs localmente.
-- API HTTP sencilla.
-- Descarga automática de modelos.
-
-### Caso de uso en NAIRA
-**Problema:** las alertas `"soil_moisture_pct: anomaly detected, score=4.2"` son difíciles de interpretar para usuarios no técnicos.
-
-**Solución:** usar TinyLlama para generar descripciones en lenguaje natural:
-```
-"Se ha detectado un nivel de humedad del suelo inusualmente bajo (15%) 
-en el nodo agrícola. Esto podría indicar un fallo en el sistema de riego 
-o condiciones de sequía. Se recomienda revisión inmediata."
-```
-
-### Limitaciones en Raspberry Pi
-- **RAM:** TinyLlama requiere al menos 4 GB (RPi 4 con 8 GB recomendado).
-- **Latencia:** generación puede tardar varios segundos en CPU.
-- **Trade-off:** útil para alertas no urgentes, no para decisiones en tiempo real crítico.
-
----
-
 ## Resumen de tecnologías clave
 
 | Componente | Tecnología | Propósito |
@@ -318,7 +288,6 @@ o condiciones de sequía. Se recomienda revisión inmediata."
 | Base de datos | InfluxDB | Almacenamiento series temporales |
 | Consultas | Flux | Recuperación de ventanas históricas |
 | Visualización | Streamlit | Dashboard interactivo |
-| LLM ligero | Ollama + TinyLlama | Generación de texto (alertas) |
 | Hardware | Raspberry Pi 4 | Edge computing |
 
 ---
@@ -327,6 +296,5 @@ o condiciones de sequía. Se recomienda revisión inmediata."
 
 - [InfluxDB Documentation](https://docs.influxdata.com/)
 - [Streamlit Documentation](https://docs.streamlit.io/)
-- [Ollama](https://ollama.ai/)
 - Chandola, V., Banerjee, A., & Kumar, V. (2009). "Anomaly detection: A survey". ACM Computing Surveys.
 - Rousseeuw, P. J., & Croux, C. (1993). "Alternatives to the Median Absolute Deviation". Journal of the American Statistical Association.

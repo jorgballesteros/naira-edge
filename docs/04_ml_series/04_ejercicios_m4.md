@@ -161,41 +161,6 @@ samples = [
 
 ---
 
-## Sesión 3 (opcional) — LLMs ligeros y caso práctico final
-
-### Ejercicio 7 · Cliente Ollama para TinyLlama
-**Objetivo:** implementar un cliente para generar descripciones de anomalías en lenguaje natural.
-
-**Tareas:**
-1. Instalar Ollama en el entorno de desarrollo:
-   ```bash
-   curl -fsSL https://ollama.com/install.sh | sh
-   ollama pull tinyllama
-   ```
-2. Crear `src/llm/ollama_client.py` con la clase `TinyLlamaClient`.
-3. Implementar método `generate(prompt)` que invoque la API HTTP de Ollama.
-4. Probar con un prompt de ejemplo:
-   ```python
-   prompt = """
-   Se ha detectado una anomalía en el sensor de humedad del suelo.
-   Valor actual: 12%
-   Valor esperado: 45-55%
-   Z-score: 4.2
-   
-   Genera una alerta breve en español para el operador del sistema de riego.
-   """
-   client = TinyLlamaClient()
-   response = client.generate(prompt)
-   print(response)
-   ```
-
-**Entregables:**
-- Código funcional de `TinyLlamaClient`.
-- Ejemplo de salida generada por TinyLlama.
-- Comentario sobre viabilidad en Raspberry Pi (latencia observada, uso de RAM).
-
----
-
 ### Caso práctico final · Sistema completo de detección
 
 **Objetivo:** integrar todos los componentes en un sistema funcional end-to-end.
@@ -225,6 +190,8 @@ Construir un pipeline completo que:
   - Resultados: capturas del dashboard, ejemplos de anomalías detectadas.
   - Limitaciones y trabajo futuro.
 
+**Nota:** la generación de alertas en lenguaje natural con LLMs se cubre en el Módulo 5.
+
 ---
 
 ## Criterios de evaluación
@@ -236,6 +203,6 @@ Construir un pipeline completo que:
 | Dashboard funcional y usable | 20% |
 | Documentación y claridad del código | 15% |
 | Análisis comparativo (z-score vs MAD) | 10% |
-| Creatividad y mejoras opcionales (LLM, alertas) | 5% |
+| Creatividad y mejoras opcionales (alertas, visualización) | 5% |
 
 **Nota:** el caso práctico final puede desarrollarse en grupos de 2-3 personas.
