@@ -2,7 +2,7 @@
 
 ## 🎯 Descripción General
 
-Módulo responsable de **leer datos sensoriales** del nodo Raspberry Pi y almacenarlos en una base de datos SQLite. Comunica con un **Arduino MKR** conectado por **puerto serie (USB)** que transmite datos de **3 sensores**:
+Módulo responsable de **leer datos sensoriales**, normalizarlos y publicarlos en **InfluxDB**. En paralelo mantiene un **StateStore SQLite** con el estado operativo del nodo (snapshots, eventos, inventario y cola offline). Comunica con un **Arduino MKR** conectado por **puerto serie (USB)** que transmite datos de **3 sensores**:
 
 1. 🌡️ **Temperatura del aire** (`temperature X.XX` en °C)
 2. 💧 **Humedad del suelo** (`moisture X` en %)
@@ -21,10 +21,11 @@ src/acquisition/
 ├── TESTS_SUMMARY.md                  ← Resumen de suite de tests
 ├── run_tests.sh                      ← Script helper para ejecutar tests
 ├── test_serial_reader.py             ← 🧪 Suite de 37 tests (nuevo)
-├── db.py                             ← Base de datos SQLite
+├── state_store.py                    ← SQLite para estado/eventos/cola
+├── db.py                             ← (Legacy) SQLite histórico de muestras
 ├── collector.py                      ← Colector de puerto serie (principal)
 ├── stub.py                           ← Simulador (default)
-├── example_db_usage.py               ← Ejemplos de uso
+├── example_db_usage.py               ← Ejemplos de StateStore
 ├── listen_serial.py                  ← Lee puerto serie (raw - debug)
 ├── temp_serial.py                    ← Parsing de temperatura (debug)
 ├── light_serial.py                   ← Parsing de luz (debug)
@@ -35,45 +36,45 @@ src/acquisition/
 
 ### Módulos Componentes (Flujo Principal)
 
-#### `db.py` (Base de Datos SQLite) ⭐
-- **`SensorDatabase`**: Gestor de BD con operaciones CRUD
+#### `state_store.py` (StateStore SQLite) ⭐
+- **`StateStore`**: Almacén de estado operativo.
 - **Tablas principales**:
-  - `sensor_samples`: Muestras sensoriales crudas
-  - `daily_aggregates`: Agregaciones diarias (min, max, avg)
-  - `device_status`: Estado del dispositivo (CPU, RAM, temp)
+    - `node_snapshot`: última vista consolidada del nodo (modo, firmware, health).
+    - `event_log`: eventos y alertas con `severity`, `context` JSON y `ack_ts`.
+    - `inventory_items`: sensores/actuadores registrados y su estado actual.
+    - `config_versions`: snapshots versionados del `Settings` efectivo.
+    - `pending_payloads`: cola offline para reintentos (telemetría, eventos, etc.).
 - **Métodos clave**:
-  - `insert_sample()`: Insertar una muestra
-  - `insert_samples_batch()`: Insertar múltiples muestras
-  - `get_samples()`: Consultar muestras recientes
-  - `get_samples_time_range()`: Consultar por rango de tiempo
-  - `compute_daily_aggregate()`: Calcular agregaciones diarias
-  - `get_stats()`: Estadísticas de la BD
-  - `delete_old_samples()`: Limpieza de datos antiguos
-- **Ubicación**: `/home/naira/NAIRA/naira-edge/data/naira_sensors.db`
-- **Índices optimizados**: `ts`, `metric`, `node_id`
+    - `update_node_snapshot()`
+    - `log_event()` / `ack_event()`
+    - `upsert_inventory_item()`
+    - `save_config_version()`
+    - `enqueue_payload()` / `get_pending_payloads()` / `mark_payload_*()`
+    - `get_queue_stats()`
+- **Ubicación**: `/home/naira/NAIRA/naira-edge/data/naira_state.db`
+- **Nota**: `db.py` se mantiene como legado para migraciones históricas de `sensor_samples`.
 
 #### `collector.py` (Colector de Puerto Serie) ⭐
-- **`SerialCollector`**: Lee Arduino, parsea, normaliza y guarda en BD
+- **`SerialCollector`**: Lee Arduino, parsea, normaliza y publica en Influx.
 - **Métodos clave**:
   - `connect()`: Abre puerto serie
   - `read_line()`: Lee una línea del puerto
   - `parse_line()`: Parsea formato "sensor_type value"
   - `normalize_sample()`: Convierte a estructura NAIRA
-  - `read_and_store_one()`: Lee una línea y la guarda en BD
-  - `read_and_store_loop()`: Bucle continuo de lectura
+    - `read_and_store_one()`: Lee una línea y la publica (online/offline)
+    - `read_and_store_loop()`: Bucle continuo con reenvío de cola offline
   - `get_last_values()`: Caché de últimos valores
-  - `get_db_stats()`: Estadísticas de la BD
+- **StateStore**: registra eventos, snapshots y cola offline cuando Influx no está disponible.
 - **CLI**: `collect_cli()` para uso desde terminal
 - **Validación**: Checks de rango para detectar datos defectuosos
 
-#### `example_db_usage.py` (Ejemplos de Uso) ⭐
-- 6 ejemplos prácticos completos:
-  1. Insertar muestras
-  2. Consultar muestras recientes
-  3. Consultar rango de tiempo
-  4. Estadísticas de la BD
-  5. Insertar estado del dispositivo
-  6. Exportar a JSON
+#### `example_db_usage.py` (Ejemplos de StateStore) ⭐
+- Demuestra cómo:
+    1. Actualizar el snapshot del nodo.
+    2. Registrar/ack eventos.
+    3. Mantener inventario de sensores.
+    4. Usar la cola offline para telemetría.
+    5. Consultar estadísticas del store.
 - Ejecutable: `python -m src.acquisition.example_db_usage`
 
 ### Módulos de Utilidad (Debugging/Ejemplos)
@@ -197,12 +198,12 @@ python -m src.acquisition.collector \
 **Output esperado:**
 ```
 2026-01-15 14:30:45,123 [INFO] Conectado a /dev/ttyACM0 @ 9600 baud
-2026-01-15 14:30:45,234 [INFO] Guardado: temp_aire=18.96 °C
-2026-01-15 14:30:45,345 [INFO] Guardado: luminosidad=5.00 lux
-2026-01-15 14:30:45,456 [INFO] Guardado: humedad_suelo=800 %
+2026-01-15 14:30:45,234 [INFO] Publicado: temp_aire=18.96 °C
+2026-01-15 14:30:45,345 [INFO] Publicado: luminosidad=5.00 lux
+2026-01-15 14:30:45,456 [WARN] Muestra encolada offline: humedad_suelo
 
-✓ 3 muestras guardadas
-Stats: {'total_samples': 3, 'total_metrics': 3, ...}
+✓ 3 muestras procesadas
+State stats: {'pending_payloads': 1, ...}
 ```
 
 ### Opción 2: Desde Python
@@ -364,6 +365,7 @@ def read_sensor(sim: bool = True) -> Dict[str, float]:
 | `NAIRA_SERIAL_PORT` | Puerto serie | `"/dev/ttyACM0"` |
 | `NAIRA_SERIAL_BAUDRATE` | Baudrate | `9600` |
 | `NAIRA_SIM` | Modo simulado | `1` (activado) |
+| `NAIRA_COLLECTOR_INTERVAL` | Pausa entre lecturas individuales (segundos) | `10` (≈30s ciclo completo) |
 
 ---
 
@@ -417,155 +419,82 @@ python -m src.main --sim --log INFO
 
 ---
 
-## � Base de Datos SQLite
+## 🗃️ StateStore SQLite (estado operativo)
 
-El módulo incluye almacenamiento persistente de datos en SQLite con **3 tablas principales**:
+La telemetría ahora se persiste en InfluxDB, y el SQLite del nodo queda para **estado interno, eventos, inventario y cola offline**. Todo vive en `state_store.py`.
 
-### Tabla: `sensor_samples`
+### Tablas principales
 
-Almacena todas las muestras sensoriales crudas:
+| Tabla | Propósito |
+|-------|-----------|
+| `node_snapshot` | Última vista consolidada del nodo (modo, firmware, uptime, `health`, resumen JSON). 1 fila por `node_id`. |
+| `event_log` | Bitácora de eventos/alertas con `severity`, tipo y contexto JSON (+ `ack_ts`). |
+| `inventory_items` | Registro de sensores/actuadores (UID, modelo, puerto, estado y metadata). |
+| `config_versions` | Snapshots versionados del config efectivo (timestamp, hash, payload). |
+| `pending_payloads` | Cola offline para telemetría/alertas cuando Influx o la red fallan (payload JSON + `retry_count`). |
 
-| Campo | Tipo | Descripción |
-|-------|------|-------------|
-| `id` | INTEGER | ID único (auto-increment) |
-| `ts` | TEXT | Timestamp ISO8601-UTC |
-| `node_id` | TEXT | ID del nodo |
-| `source` | TEXT | Fuente (meteo, suelo, riego) |
-| `metric` | TEXT | Tipo de métrica |
-| `value` | REAL | Valor numérico |
-| `unit` | TEXT | Unidad (°C, %, lux) |
-| `quality` | TEXT | Calidad (ok, suspect, bad) |
-| `created_at` | TEXT | Timestamp de inserción |
+> ⚠️ `db.py` se mantiene solo para migraciones históricas de `sensor_samples`. Nuevos desarrollos usan `StateStore` + Influx.
 
-**Índices**: `ts`, `metric`, `node_id`
-
-### Tabla: `daily_aggregates`
-
-Agregaciones diarias (min, max, promedio):
-
-| Campo | Tipo | Descripción |
-|-------|------|-------------|
-| `date` | TEXT | Fecha YYYY-MM-DD |
-| `node_id` | TEXT | ID del nodo |
-| `metric` | TEXT | Tipo de métrica |
-| `value_min` | REAL | Mínimo del día |
-| `value_max` | REAL | Máximo del día |
-| `value_avg` | REAL | Promedio del día |
-| `value_count` | INTEGER | Número de muestras |
-
-### Tabla: `device_status`
-
-Estado del dispositivo (CPU, RAM, temperatura):
-
-| Campo | Tipo | Descripción |
-|-------|------|-------------|
-| `ts` | TEXT | Timestamp |
-| `node_id` | TEXT | ID del nodo |
-| `status` | TEXT | Estado (ok, warning, error) |
-| `cpu_pct` | REAL | Uso de CPU (%) |
-| `ram_pct` | REAL | Uso de RAM (%) |
-| `disk_pct` | REAL | Uso de disco (%) |
-| `temp_c` | REAL | Temperatura (°C) |
-| `uptime_s` | REAL | Uptime en segundos |
-
----
-
-### 🔧 Uso de la Base de Datos
-
-#### Insertar una Muestra
+### Uso básico
 
 ```python
-from src.acquisition.db import get_database
-from datetime import datetime
-
+from src.acquisition.state_store import get_state_store
 from datetime import datetime, UTC
 
-db = get_database()
+store = get_state_store()
 
-sample = {
-    "ts": datetime.now(UTC).isoformat().replace("+00:00", "") + "Z",
-    "node_id": "naira-node-001",
-    "source": "meteo",
-    "metric": "temp_aire",
-    "value": 23.45,
-    "unit": "°C",
-    "quality": "ok"
-}
-
-row_id = db.insert_sample(sample)
-print(f"Muestra insertada con ID: {row_id}")
-```
-
-#### Insertar Múltiples Muestras (Lote)
-
-```python
-samples = [
-    {...},  # Muestra 1
-    {...},  # Muestra 2
-    {...},  # Muestra 3
-]
-
-inserted = db.insert_samples_batch(samples)
-print(f"Insertadas {inserted} muestras")
-```
-
-#### Consultar Muestras Recientes
-
-```python
-# Últimas 100 muestras
-samples = db.get_samples(limit=100)
-
-# Últimas 10 muestras de temperatura
-temp_samples = db.get_samples(metric="temp_aire", limit=10)
-
-for sample in samples:
-    print(f"{sample['ts']} | {sample['metric']}={sample['value']} {sample['unit']}")
-```
-
-#### Consultar Rango de Tiempo
-
-```python
-from datetime import datetime, timedelta, UTC
-
-start = (datetime.now(UTC) - timedelta(days=1)).isoformat().replace("+00:00", "") + "Z"
-end = datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"
-
-samples = db.get_samples_time_range(start, end, metric="temp_aire")
-print(f"Encontradas {len(samples)} muestras")
-```
-
-#### Calcular Agregaciones Diarias
-
-```python
-aggregate = db.compute_daily_aggregate(
-    date_str="2026-01-15",
-    metric="temp_aire",
-    node_id="naira-node-001"
+# Snapshot del nodo
+store.update_node_snapshot(
+    {
+        "node_id": "naira-node-001",
+        "ts": datetime.now(UTC).isoformat().replace("+00:00", "") + "Z",
+        "mode": "sim",
+        "health": "ok",
+        "summary": {"last_metric": "temp_aire", "value": 23.4},
+    }
 )
 
-print(f"Min: {aggregate['value_min']}")
-print(f"Max: {aggregate['value_max']}")
-print(f"Avg: {aggregate['value_avg']}")
-print(f"Count: {aggregate['value_count']}")
+# Registrar evento
+event_id = store.log_event(
+    {
+        "event_type": "telemetry_sink_unavailable",
+        "severity": "warn",
+        "context": {"metric": "temp_aire"},
+    }
+)
+
+# Inventario
+store.upsert_inventory_item(
+    {
+        "device_uid": "sensor-temp-001",
+        "kind": "sensor",
+        "model": "MKR-temp",
+        "port": "/dev/ttyACM0",
+        "status": "online",
+        "meta": {"unit": "°C"},
+    }
+)
+
+# Cola offline
+store.enqueue_payload({"type": "sensor_sample", "data": {...}}, kind="telemetry")
+pending = store.get_pending_payloads(limit=5)
 ```
 
-#### Obtener Estadísticas
+### Cola offline y reenvíos
+
+- `SerialCollector` publica en Influx y, si falla, llama a `enqueue_payload()`.
+- En cada iteración intenta `get_pending_payloads()` y reenvía usando `write_sensor_sample()`.
+- Cada payload guarda `retry_count`, `next_retry_ts` y último error.
+
+### Estadísticas y monitoreo
 
 ```python
-stats = db.get_stats()
-print(f"Total muestras: {stats['total_samples']}")
-print(f"Métricas únicas: {stats['total_metrics']}")
-print(f"Rango: {stats['earliest_ts']} → {stats['latest_ts']}")
-print(f"Tamaño BD: {stats['db_size_mb']:.2f} MB")
+stats = store.get_queue_stats()
+print(stats)
+# {'state_db': '/home/.../naira_state.db', 'pending_payloads': 3, 'inventory_items': 5, ...}
 ```
 
-#### Limpiar Datos Antiguos
-
-```python
-# Eliminar muestras más antiguas de 30 días
-deleted = db.delete_old_samples(days_old=30)
-print(f"Eliminadas {deleted} muestras antiguas")
-```
+Integra estas métricas a dashboards o alerts para saber si la cola offline está creciendo.
 
 ---
 
@@ -643,22 +572,24 @@ Y las convierte automáticamente a:
 
 ---
 
-### 📍 Ubicación de la Base de Datos
+### 📍 Ubicación del StateStore
 
-La BD se crea automáticamente en:
+El nuevo SQLite vive en:
 ```
-/home/naira/NAIRA/naira-edge/data/naira_sensors.db
+/home/naira/NAIRA/naira-edge/data/naira_state.db
 ```
 
-Puedes consultar directamente con sqlite3:
+Comandos útiles:
 
 ```bash
-sqlite3 /home/naira/NAIRA/naira-edge/data/naira_sensors.db
+sqlite3 /home/naira/NAIRA/naira-edge/data/naira_state.db
 
-# Dentro de sqlite3:
-sqlite> SELECT COUNT(*) FROM sensor_samples;
-sqlite> SELECT * FROM sensor_samples LIMIT 5;
-sqlite> SELECT DISTINCT metric FROM sensor_samples;
+sqlite> .tables
+event_log           inventory_items     node_snapshot
+config_versions     pending_payloads
+
+sqlite> SELECT COUNT(*) FROM pending_payloads;
+sqlite> SELECT * FROM event_log ORDER BY ts DESC LIMIT 5;
 sqlite> .quit
 ```
 
@@ -666,7 +597,7 @@ sqlite> .quit
 
 ### 💡 Ejemplos Completos
 
-Ver `example_db_usage.py` para ejemplos prácticos:
+Ver `example_db_usage.py` para ejercicios del StateStore:
 
 ```bash
 python src/acquisition/example_db_usage.py
@@ -675,23 +606,23 @@ python src/acquisition/example_db_usage.py
 **Output esperado**:
 ```
 ============================================================
-EJEMPLO 1: Insertar Muestras
+EJEMPLO 1: Node Snapshot
 ============================================================
-[INFO] Insertadas 4 muestras de ejemplo
+✓ Snapshot actualizado
 
 ============================================================
-EJEMPLO 2: Consultar Muestras
+EJEMPLO 2: Event Log
 ============================================================
-Últimas 10 muestras: 4 filas
-  2026-01-15T14:28:45.123Z | temp_aire       = 23.45 °C (ok)
-  ...
+Evento registrado id=1, ack posterior
 
 ============================================================
-EJEMPLO 3: Estadísticas de la BD
+EJEMPLO 3: State Stats
 ============================================================
-Total de muestras:        4
-Métricas únicas:          3
-...
+{
+    "pending_payloads": 1,
+    "inventory_items": 1,
+    ...
+}
 ```
 
 ---

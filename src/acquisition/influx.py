@@ -46,12 +46,20 @@ class InfluxSink:
         bucket: str,
         enabled: bool,
         measurement: str = "naira_samples",
+        telemetry_bucket: Optional[str] = None,
+        resources_bucket: Optional[str] = None,
+        events_bucket: Optional[str] = None,
+        measurement_resources: str = "naira_resource",
     ) -> None:
         self.url = url
         self.token = token
         self.org = org
-        self.bucket = bucket
+        self.bucket = bucket  # compatibilidad hacia atrás
+        self.bucket_telemetry = telemetry_bucket or bucket
+        self.bucket_resources = resources_bucket or self.bucket_telemetry
+        self.bucket_events = events_bucket or self.bucket_telemetry
         self.measurement = measurement
+        self.measurement_resources = measurement_resources
         self.enabled = bool(enabled)
         self.client: Optional[InfluxDBClient] = None
         self.write_api = None
@@ -60,7 +68,7 @@ class InfluxSink:
             logger.debug("InfluxDB deshabilitado por configuración.")
             return
 
-        if not all([self.url, self.token, self.org, self.bucket]):
+        if not all([self.url, self.token, self.org]):
             logger.warning(
                 "InfluxDB activo pero sin parámetros completos. Se deshabilita la replicación."
             )
@@ -94,17 +102,39 @@ class InfluxSink:
             self.client = None
             self.write_api = None
 
-    def write_sample(self, sample: Dict) -> None:
-        """Envía una muestra normalizada a InfluxDB."""
-        if not self._ready():
+    def write_sensor_sample(self, sample: Dict) -> None:
+        """Envía una muestra de telemetría a InfluxDB."""
+        bucket_name = self._bucket_or_fallback(self.bucket_telemetry)
+        if not self._ready(bucket_name):
             logger.debug("Sink Influx no listo; se omite muestra %s", sample.get("metric"))
             return
 
         try:
-            point = self._build_sample_point(sample)
-            self.write_api.write(bucket=self.bucket, org=self.org, record=point)
+            point = self._build_sample_point(sample, self.measurement)
+            self._write_records(bucket_name, point)
         except Exception as exc:  # pragma: no cover - acceso remoto
-            logger.warning("No se pudo replicar métrica %s en Influx: %s", sample.get("metric"), exc)
+            logger.warning(
+                "No se pudo replicar métrica %s en Influx: %s", sample.get("metric"), exc
+            )
+
+    def write_sample(self, sample: Dict) -> None:
+        """Alias legacy para write_sensor_sample."""
+        self.write_sensor_sample(sample)
+
+    def write_resource_sample(self, sample: Dict) -> None:
+        """Envía métricas de recursos del nodo."""
+        bucket_name = self._bucket_or_fallback(self.bucket_resources)
+        if not self._ready(bucket_name):
+            logger.debug("Sink Influx no listo; recurso omitido %s", sample.get("resource"))
+            return
+
+        try:
+            point = self._build_resource_point(sample, self.measurement_resources)
+            self._write_records(bucket_name, point)
+        except Exception as exc:  # pragma: no cover - acceso remoto
+            logger.warning(
+                "No se pudo replicar recurso %s en Influx: %s", sample.get("resource"), exc
+            )
 
     def write_samples(self, samples: Iterable[Dict]) -> None:
         """Envía múltiples muestras en un lote."""
@@ -112,25 +142,27 @@ class InfluxSink:
         if not buffered:
             return
 
-        if not self._ready():
+        bucket_name = self._bucket_or_fallback(self.bucket_telemetry)
+        if not self._ready(bucket_name):
             logger.debug("Sink Influx no listo; lote omitido (%d muestras)", len(buffered))
             return
 
         points = []
         for sample in buffered:
             try:
-                points.append(self._build_sample_point(sample))
+                points.append(self._build_sample_point(sample, self.measurement))
             except Exception as exc:
                 logger.debug("Muestra descartada para Influx (%s): %s", sample.get("metric"), exc)
         if points:
             try:
-                self.write_api.write(bucket=self.bucket, org=self.org, record=points)
+                self._write_records(bucket_name, points)
             except Exception as exc:  # pragma: no cover - acceso remoto
                 logger.warning("Error replicando lote en Influx: %s", exc)
 
     def write_device_status(self, node_id: str, status_data: Dict) -> None:
         """Replica estado del dispositivo en Influx."""
-        if not self._ready() or Point is None:
+        bucket_name = self._bucket_or_fallback(self.bucket_resources)
+        if not self._ready(bucket_name) or Point is None:
             logger.debug("Sink Influx no listo; estado omitido")
             return
 
@@ -146,22 +178,41 @@ class InfluxSink:
         self._assign_numeric_field(point, "uptime_s", status_data.get("uptime_s"))
 
         try:
-            self.write_api.write(bucket=self.bucket, org=self.org, record=point)
+            self._write_records(bucket_name, point)
         except Exception as exc:  # pragma: no cover - acceso remoto
             logger.warning("No se pudo replicar estado del nodo %s: %s", node_id, exc)
 
-    def _ready(self) -> bool:
-        ready = bool(self.enabled and self.write_api and Point and WritePrecision)
+    def _write_records(self, bucket_name: Optional[str], record) -> None:
+        if not bucket_name:
+            raise ValueError("No hay bucket configurado para Influx")
+        self.write_api.write(bucket=bucket_name, org=self.org, record=record)
+
+    def _bucket_or_fallback(self, preferred: Optional[str]) -> Optional[str]:
+        return preferred or self.bucket or self.bucket_telemetry
+
+    def is_ready(self, channel: str = "telemetry") -> bool:
+        if channel == "resources":
+            bucket = self.bucket_resources
+        elif channel == "events":
+            bucket = self.bucket_events
+        else:
+            bucket = self.bucket_telemetry
+        return self._ready(bucket)
+
+    def _ready(self, bucket_name: Optional[str] = None) -> bool:
+        bucket_ok = bucket_name or self.bucket_telemetry or self.bucket
+        ready = bool(self.enabled and self.write_api and Point and WritePrecision and bucket_ok)
         if not ready:
             logger.debug(
-                "Sink Influx no inicializado (enabled=%s, client=%s, write_api=%s)",
+                "Sink Influx no inicializado (enabled=%s, client=%s, write_api=%s, bucket=%s)",
                 self.enabled,
                 bool(self.client),
                 bool(self.write_api),
+                bucket_ok,
             )
         return ready
 
-    def _build_sample_point(self, sample: Dict):
+    def _build_sample_point(self, sample: Dict, measurement: str):
         if Point is None:
             raise RuntimeError("Point no disponible; verificar instalación de influxdb-client")
 
@@ -172,7 +223,7 @@ class InfluxSink:
         except (TypeError, ValueError):
             numeric_value = 0.0
         point = (
-            Point(self.measurement)
+            Point(measurement)
             .tag("node_id", sample.get("node_id", "unknown"))
             .tag("source", sample.get("source", "unknown"))
             .tag("metric", sample.get("metric", "unknown"))
@@ -180,6 +231,30 @@ class InfluxSink:
             .tag("quality", sample.get("quality", "ok"))
             .field("value", numeric_value)
         )
+        point.time(ts, WritePrecision.NS if WritePrecision else None)
+        return point
+
+    def _build_resource_point(self, sample: Dict, measurement: str):
+        if Point is None:
+            raise RuntimeError("Point no disponible; verificar instalación de influxdb-client")
+
+        ts = self._get_timestamp(sample.get("ts"))
+        value = sample.get("value")
+        try:
+            numeric_value = float(value) if value is not None else 0.0
+        except (TypeError, ValueError):
+            numeric_value = 0.0
+
+        point = (
+            Point(measurement)
+            .tag("node_id", sample.get("node_id", "unknown"))
+            .tag("resource", sample.get("resource", sample.get("metric", "unknown")))
+            .tag("unit", sample.get("unit", ""))
+            .tag("quality", sample.get("quality", "ok"))
+            .field("value", numeric_value)
+        )
+        if "meta" in sample:
+            point.tag("meta", str(sample.get("meta")))
         point.time(ts, WritePrecision.NS if WritePrecision else None)
         return point
 
@@ -219,6 +294,9 @@ def get_influx_sink() -> Optional[InfluxSink]:
             org=settings.influx_org,
             bucket=settings.influx_bucket,
             enabled=settings.influx_enabled,
+            telemetry_bucket=settings.influx_bucket_telemetry,
+            resources_bucket=settings.influx_bucket_resources,
+            events_bucket=settings.influx_bucket_events,
         )
     return _influx_instance if _influx_instance.enabled else None
 
