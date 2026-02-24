@@ -12,16 +12,40 @@ def _dummy_config() -> OllamaConfig:
     return OllamaConfig(host="localhost", port=11434, model="tinyllama", timeout_s=5.0)
 
 
-def test_is_model_ready_true() -> None:
-    client = TinyLlamaClient(config=_dummy_config())
+def _make_tags_response(names: list[str]) -> MagicMock:
     response = MagicMock()
-    response.json.return_value = {"models": [{"name": "tinyllama:latest"}]}
+    response.json.return_value = {"models": [{"name": n} for n in names]}
     response.raise_for_status.return_value = None
+    return response
 
-    with patch("src.llm.ollama_client.requests.get", return_value=response) as mock_get:
+
+def test_is_model_ready_no_tag_matches_any_variant() -> None:
+    """Sin tag en config: acepta cualquier variante del modelo."""
+    client = TinyLlamaClient(config=_dummy_config())  # model="tinyllama"
+    response = _make_tags_response(["tinyllama:latest"])
+
+    with patch("src.llm.ollama_client.requests.get", return_value=response):
         assert client.is_model_ready() is True
-        mock_get.assert_called_once()
         response.close.assert_called_once()
+
+
+def test_is_model_ready_explicit_tag_requires_exact_match() -> None:
+    """Con tag explícito: solo coincide la variante exacta."""
+    config = OllamaConfig(host="localhost", port=11434, model="tinyllama:1.1b", timeout_s=5.0)
+    client = TinyLlamaClient(config=config)
+    response = _make_tags_response(["tinyllama:latest"])
+
+    with patch("src.llm.ollama_client.requests.get", return_value=response):
+        assert client.is_model_ready() is False
+
+
+def test_is_model_ready_explicit_tag_matches_exact() -> None:
+    config = OllamaConfig(host="localhost", port=11434, model="tinyllama:1.1b", timeout_s=5.0)
+    client = TinyLlamaClient(config=config)
+    response = _make_tags_response(["tinyllama:1.1b"])
+
+    with patch("src.llm.ollama_client.requests.get", return_value=response):
+        assert client.is_model_ready() is True
 
 
 def test_generate_returns_text() -> None:
@@ -54,8 +78,8 @@ def test_pull_model_success_stream() -> None:
 
     response = MagicMock()
     response.iter_lines.return_value = [
-        "{\"status\": \"downloading\"}",
-        "{\"success\": true}",
+        '{"status": "downloading"}',
+        '{"status": "success"}',
     ]
     response.raise_for_status.return_value = None
 

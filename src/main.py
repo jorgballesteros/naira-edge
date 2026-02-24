@@ -38,12 +38,27 @@ def main(argv: list[str] | None = None) -> int:
         from .control import stub as control_stub
         from .diagnostics import stub as diag_stub
 
+        from .llm.stub import get_client as get_llm_client
+        from .llm.ollama_client import load_role
+
         # Run a minimal orchestrated cycle
         data = acquisition_stub.read_sensor(sim=args.sim)
         processed = processing_stub.process_sample(data)
         comms_stub.publish_sample(processed)
         control_stub.apply_rules(processed)
         diag = diag_stub.health_check()
+
+        # LLM: interpretación del sample procesado
+        from .config import load_settings as _load_settings
+        _cfg = _load_settings()
+        llm = get_llm_client(sim=args.sim)
+        role = load_role(_cfg.ollama_role_path)
+        prompt = (
+            f"Datos del nodo: {processed}\n"
+            "Resume en una frase el estado del sistema y si hay algún problema."
+        )
+        interpretation = llm.generate(prompt, system=role, options={"num_ctx": _cfg.ollama_num_ctx})
+        logging.getLogger(__name__).info("LLM: %s", interpretation)
 
         logging.getLogger(__name__).info("Cycle finished — health=%s", diag)
     except Exception:

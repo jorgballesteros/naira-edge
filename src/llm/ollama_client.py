@@ -6,6 +6,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
 import requests
@@ -30,6 +31,20 @@ class OllamaConfig:
     @property
     def base_url(self) -> str:
         return f"http://{self.host}:{self.port}"
+
+
+def load_role(path: str | Path | None = None) -> str:
+    """Carga el rol del modelo desde un archivo de texto.
+
+    Devuelve el contenido del archivo o cadena vacía si no existe o no se especifica.
+    """
+    if not path:
+        return ""
+    try:
+        return Path(path).read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        logger.warning("No se pudo cargar el rol desde '%s': %s", path, exc)
+        return ""
 
 
 def config_from_settings(settings: Optional[Settings] = None) -> OllamaConfig:
@@ -82,10 +97,8 @@ class TinyLlamaClient:
             response.close()
 
         models = payload.get("models") or []
-        desired = self._normalize_name(self._config.model)
         for entry in models:
-            name = self._normalize_name(entry.get("name", ""))
-            if name == desired:
+            if self._model_matches(entry.get("name", "")):
                 return True
         return False
 
@@ -123,7 +136,7 @@ class TinyLlamaClient:
             status = chunk.get("status")
             if status:
                 logger.info("[ollama pull] %s", status)
-            if chunk.get("success") is True:
+            if status == "success":
                 success = True
         response.close()
 
@@ -134,6 +147,7 @@ class TinyLlamaClient:
     def generate(
         self,
         prompt: str,
+        system: Optional[str] = None,
         options: Optional[Dict[str, Any]] = None,
         stream: bool = False,
     ) -> str:
@@ -148,6 +162,8 @@ class TinyLlamaClient:
             "prompt": prompt,
             "stream": stream,
         }
+        if system:
+            payload["system"] = system
         if options:
             payload["options"] = options
 
@@ -164,8 +180,10 @@ class TinyLlamaClient:
             raise RuntimeError("No se pudo generar respuesta con TinyLlama") from exc
 
         if stream:
-            chunks = [chunk.get("response", "") for chunk in self._iter_stream(response)]
-            response.close()
+            try:
+                chunks = [chunk.get("response", "") for chunk in self._iter_stream(response)]
+            finally:
+                response.close()
             return "".join(chunks).strip()
 
         try:
@@ -189,12 +207,19 @@ class TinyLlamaClient:
                 logger.debug("Chunk no parseable de Ollama: %s", raw_line)
                 continue
 
-    @staticmethod
-    def _normalize_name(raw_name: str) -> str:
-        base = raw_name or ""
-        if ":" in base:
-            base = base.split(":", 1)[0]
-        return base.strip().lower()
+    def _model_matches(self, installed_name: str) -> bool:
+        """True si installed_name satisface el modelo configurado.
+
+        - Sin tag en config (p. ej. "tinyllama"): acepta cualquier variante
+          ("tinyllama:latest", "tinyllama:1.1b", …).
+        - Con tag explícito (p. ej. "tinyllama:1.1b"): exige coincidencia exacta;
+          no acepta "tinyllama:latest" en su lugar.
+        """
+        desired = (self._config.model or "").strip().lower()
+        installed = (installed_name or "").strip().lower()
+        if ":" in desired:
+            return installed == desired
+        return installed.split(":", 1)[0] == desired
 
 
-__all__ = ["OllamaConfig", "TinyLlamaClient", "config_from_settings"]
+__all__ = ["OllamaConfig", "TinyLlamaClient", "config_from_settings", "load_role"]

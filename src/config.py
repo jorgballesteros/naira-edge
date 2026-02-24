@@ -49,10 +49,15 @@ class Settings:
     # LLM / Ollama
     ollama_host: str = os.getenv("NAIRA_OLLAMA_HOST", "127.0.0.1")
     ollama_port: int = int(os.getenv("NAIRA_OLLAMA_PORT", "11434"))
-    ollama_model: str = os.getenv("NAIRA_OLLAMA_MODEL", "tinyllama")
-    ollama_timeout_s: float = float(os.getenv("NAIRA_OLLAMA_TIMEOUT", "30"))
+    ollama_model: str = os.getenv("NAIRA_OLLAMA_MODEL", "qwen2.5:1.5b")
+    ollama_timeout_s: float = float(os.getenv("NAIRA_OLLAMA_TIMEOUT", "120"))
     ollama_pull_retries: int = int(os.getenv("NAIRA_OLLAMA_PULL_RETRIES", "2"))
     ollama_retry_backoff_s: float = float(os.getenv("NAIRA_OLLAMA_RETRY_BACKOFF", "2"))
+    ollama_num_ctx: int = int(os.getenv("NAIRA_OLLAMA_NUM_CTX", "4096"))
+    ollama_role_path: str = os.getenv(
+        "NAIRA_OLLAMA_ROLE_PATH",
+        str(os.path.join(os.path.dirname(__file__), "llm", "role.md")),
+    )
 
 
 def load_settings() -> Settings:
