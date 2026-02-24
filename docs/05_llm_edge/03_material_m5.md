@@ -198,16 +198,33 @@ curl http://localhost:11434/api/generate -d '{
 ### Diseño modular
 
 **Componentes:**
-1. **OllamaConfig**: configuración (host, port, model, timeouts)
-2. **TinyLlamaClient**: lógica de interacción con Ollama
-3. **config_from_settings()**: integración con `src.config`
+1. **`OllamaConfig`**: configuración (host, port, model, timeouts, num_ctx)
+2. **`TinyLlamaClient`**: lógica de interacción con Ollama
+3. **`config_from_settings()`**: integración con `src.config`
+4. **`load_role(path)`**: carga del rol desde archivo externo
+5. **`StubLlamaClient`** (`stub.py`): simulador sin Ollama
 
-### Implementación básica
+### Comparación de modelos con tag
+
+Un problema habitual es que Ollama reporta el modelo con tag (`"tinyllama:latest"`) pero la config puede no incluirlo. La lógica correcta:
+
+```python
+def _model_matches(self, installed_name: str) -> bool:
+    desired = (self._config.model or "").strip().lower()
+    installed = (installed_name or "").strip().lower()
+    if ":" in desired:
+        return installed == desired        # tag explícito: coincidencia exacta
+    return installed.split(":", 1)[0] == desired  # sin tag: acepta cualquier variante
+```
+
+Esto evita falsos positivos: si configuras `"tinyllama:1.1b"` no se acepta `"tinyllama:latest"`.
+
+### Implementación completa
 
 ```python
 from dataclasses import dataclass
-import requests
-import logging
+from pathlib import Path
+import requests, logging, json, time
 
 logger = logging.getLogger(__name__)
 
@@ -216,80 +233,145 @@ class OllamaConfig:
     host: str
     port: int
     model: str
-    timeout_s: float = 30.0
-    
+    timeout_s: float = 120.0   # generoso en RPi
+    pull_retries: int = 2
+    retry_backoff_s: float = 2.0
+
     @property
     def base_url(self) -> str:
         return f"http://{self.host}:{self.port}"
 
 
+def load_role(path: str | Path | None = None) -> str:
+    """Carga el rol del modelo desde un archivo de texto."""
+    if not path:
+        return ""
+    try:
+        return Path(path).read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        logger.warning("No se pudo cargar el rol desde '%s': %s", path, exc)
+        return ""
+
+
 class TinyLlamaClient:
     def __init__(self, config: OllamaConfig):
         self._config = config
-    
+
     def is_model_ready(self) -> bool:
-        """Verifica si el modelo está disponible localmente."""
         url = f"{self._config.base_url}/api/tags"
         try:
-            response = requests.get(url, timeout=self._config.timeout_s)
-            response.raise_for_status()
-            data = response.json()
-            models = [m["name"].split(":")[0] for m in data.get("models", [])]
-            return self._config.model in models
-        except Exception as e:
-            logger.warning("Error verificando modelo: %s", e)
+            r = requests.get(url, timeout=self._config.timeout_s)
+            r.raise_for_status()
+            models = r.json().get("models") or []
+            r.close()
+            return any(self._model_matches(m.get("name", "")) for m in models)
+        except Exception as exc:
+            logger.warning("No se pudo consultar Ollama: %s", exc)
             return False
-    
-    def generate(self, prompt: str, temperature: float = 0.7) -> str:
-        """Genera texto a partir de un prompt."""
+
+    def generate(
+        self,
+        prompt: str,
+        system: str | None = None,
+        options: dict | None = None,
+        stream: bool = False,
+    ) -> str:
         if not prompt.strip():
-            raise ValueError("El prompt no puede estar vacío")
-        
-        url = f"{self._config.base_url}/api/generate"
-        payload = {
-            "model": self._config.model,
-            "prompt": prompt,
-            "stream": False,
-            "options": {"temperature": temperature}
-        }
-        
+            raise ValueError("prompt no puede estar vacío")
+        payload = {"model": self._config.model, "prompt": prompt, "stream": stream}
+        if system:
+            payload["system"] = system
+        if options:
+            payload["options"] = options
         try:
-            response = requests.post(
-                url, 
-                json=payload, 
-                timeout=self._config.timeout_s
+            r = requests.post(
+                f"{self._config.base_url}/api/generate",
+                json=payload,
+                timeout=self._config.timeout_s,
+                stream=stream,
             )
-            response.raise_for_status()
-            data = response.json()
-            return data.get("response", "").strip()
-        except Exception as e:
-            logger.error("Error generando texto: %s", e)
-            raise RuntimeError("No se pudo generar respuesta") from e
+            r.raise_for_status()
+        except Exception as exc:
+            raise RuntimeError("No se pudo generar respuesta") from exc
+        if stream:
+            try:
+                chunks = [c.get("response", "") for c in self._iter_stream(r)]
+            finally:
+                r.close()
+            return "".join(chunks).strip()
+        data = r.json()
+        r.close()
+        return str(data.get("response", "")).strip()
+
+    def _model_matches(self, installed_name: str) -> bool:
+        desired = (self._config.model or "").strip().lower()
+        installed = (installed_name or "").strip().lower()
+        if ":" in desired:
+            return installed == desired
+        return installed.split(":", 1)[0] == desired
+```
+
+### Rol configurable (`role.md`)
+
+El rol define la personalidad y especialización del modelo. Se guarda en `src/llm/role.md` y se carga en cada ciclo:
+
+```python
+role = load_role(settings.ollama_role_path)
+response = client.generate(prompt, system=role, options={"num_ctx": 4096})
+```
+
+**Ejemplo de `role.md`:**
+```
+Eres un experto en análisis de series temporales aplicadas a la agricultura de precisión.
+Interpreta datos de sensores (temperatura, humedad del suelo, caudal) y proporciona
+diagnósticos claros y recomendaciones accionables. Respuestas cortas y directas.
+```
+
+El campo `system` de la API de Ollama inyecta este texto antes del prompt del usuario, condicionando el comportamiento del modelo sin consumir tokens del historial visible.
+
+### Parámetro `num_ctx`
+
+Controla el número de tokens que el modelo puede considerar como contexto:
+
+| `num_ctx` | RAM aprox. (qwen2.5:1.5b) | Uso recomendado |
+|---|---|---|
+| 512 | mínimo | Alertas muy cortas |
+| 2048 | ~1.2 GB | Uso general |
+| 4096 | ~1.5 GB | Análisis con datos (por defecto) |
+| 8192 | ~2.0 GB | Series temporales largas |
+
+```python
+options = {"num_ctx": settings.ollama_num_ctx}  # NAIRA_OLLAMA_NUM_CTX=4096
+response = client.generate(prompt, system=role, options=options)
+```
+
+### Simulador (`stub.py`)
+
+Permite desarrollar y testear sin Ollama activo:
+
+```python
+class StubLlamaClient:
+    def generate(self, prompt: str, system: str | None = None, **kwargs) -> str:
+        keywords = {"anomaly": "Anomalía detectada. Verificar calibración.",
+                    "irrigation": "Condiciones adecuadas para iniciar riego."}
+        for key, msg in keywords.items():
+            if key in prompt.lower():
+                return msg
+        return "Sistema operando dentro de parámetros normales."
+
+def get_client(sim: bool = True):
+    if sim:
+        return StubLlamaClient()
+    return TinyLlamaClient(config_from_settings())
 ```
 
 ### Gestión de errores robusta
 
 **Casos a manejar:**
 - Ollama no está ejecutándose → `ConnectionError`
-- Modelo no está descargado → descargar automáticamente con `pull_model()`
-- Timeout → configurar timeouts generosos (30-60s)
-- Respuesta vacía o malformada → validar y registrar
-
-**Ejemplo con reintentos:**
-```python
-def ensure_model_available(self) -> bool:
-    """Descarga el modelo si no está disponible."""
-    if self.is_model_ready():
-        return True
-    
-    for attempt in range(1, 3):
-        logger.info("Descargando modelo (intento %d/2)", attempt)
-        if self.pull_model() and self.is_model_ready():
-            return True
-        time.sleep(2)
-    
-    return False
-```
+- Modelo no está descargado → descargar automáticamente con `ensure_model_available()`
+- Timeout en RPi → configurar `NAIRA_OLLAMA_TIMEOUT=120` (o más)
+- Respuesta vacía o malformada → `response.close()` en `finally`
 
 ---
 
@@ -374,14 +456,59 @@ Respuesta breve y clara.
 
 ---
 
+## 5b. Interfaz Streamlit (`llm_app.py`)
+
+### Estructura
+```
+streamlit run src/llm/llm_app.py
+```
+
+**Sidebar:**
+- Toggle modo simulado (usa `StubLlamaClient` si activo)
+- Host, puerto, modelo, timeout, num_ctx
+- Estado del modelo en tiempo real + botón de descarga
+
+**Panel principal:**
+1. **Rol del modelo** (colapsado): muestra y permite editar el contenido de `role.md` en sesión
+2. **Contexto / Datos**: área para pegar datos de sensores (JSON, CSV, texto)
+3. **Historial de chat**: burbujas usuario/asistente con `st.chat_message`
+
+**Construcción del prompt:**
+```python
+if context:
+    full_prompt = f"Contexto:\n{context}\n\nPregunta: {prompt}"
+else:
+    full_prompt = prompt
+
+response = client.generate(full_prompt, system=role, options={"num_ctx": num_ctx})
+```
+
+---
+
+## 6. Selección de modelo para Raspberry Pi
+
+| Modelo | Tamaño | RAM | Calidad (datos estructurados) | Recomendado |
+|--------|--------|-----|-------------------------------|-------------|
+| `tinyllama` | 608 MB | ~1.2 GB | ⭐⭐ | Solo si RPi con <4 GB |
+| `qwen2.5:0.5b` | ~400 MB | ~0.9 GB | ⭐⭐⭐ | RPi muy limitada |
+| `qwen2.5:1.5b` | 940 MB | ~1.6 GB | ⭐⭐⭐⭐ | **Recomendado** |
+| `llama3.2:1b` | ~700 MB | ~1.3 GB | ⭐⭐⭐ | Alternativa a qwen |
+| `phi3.5` (3.8B) | ~2.2 GB | ~4 GB | ⭐⭐⭐⭐⭐ | Solo RPi 5 (8 GB) |
+
+**`qwen2.5:1.5b`** es el balance óptimo para análisis de datos estructurados en RPi 4/5: sigue instrucciones con precisión y entiende bien tablas, JSON y series numéricas.
+
+---
+
 ## Resumen de tecnologías clave
 
 | Componente | Tecnología | Propósito |
 |------------|-----------|-----------|
-| LLM ligero | TinyLlama (1.1B) | Generación de texto |
-| Framework | Ollama | Ejecución local y gestión |
-| Cliente | Python + requests | Integración con sistema IoT |
-| Hardware | Raspberry Pi 4/5 (8GB) | Edge computing |
+| LLM ligero | qwen2.5:1.5b (recomendado) | Generación de texto contextual |
+| Framework | Ollama | Ejecución local y gestión de modelos |
+| Cliente | Python + requests | Integración con el nodo NAIRA |
+| Simulador | StubLlamaClient | Desarrollo y tests sin hardware |
+| Interfaz | Streamlit | Chat interactivo con el LLM |
+| Hardware | Raspberry Pi 4/5 (4-8 GB) | Edge computing |
 
 ---
 

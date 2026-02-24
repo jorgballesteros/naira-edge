@@ -110,28 +110,43 @@ Acompañar paso a paso. Resolver problemas de instalación.
 
 ---
 
-## Sesión 3 (opcional, 2 h) — Optimización y caso práctico
+## Sesión 3 (2-3 h) — Rol, interfaz y selección de modelo
 
-### 1. Estrategias de optimización (30 min)
-- Modelos cuantizados (Q4, Q5)
-- Caching de prompts repetidos
-- Generación batch vs individual
-- Alternativas: Phi-2, Mistral-7B (si hay RAM suficiente)
+### 1. Repaso (10 min)
+- Verificar que todos tienen `generate()` con `system` y `options` funcionando.
 
-### 2. Caso de uso: sistema de alertas inteligente (60 min)
-- Pipeline completo:
-  1. Detector de anomalías identifica evento
-  2. Sistema clasifica severidad (crítico / advertencia / info)
-  3. Si crítico → enviar alerta técnica directa (Telegram)
-  4. Si advertencia → generar explicación con LLM + log
-  5. Al final del día → resumen generado por LLM
-- Implementar prototipo funcional
+### 2. Rol configurable del modelo (30 min)
+- Concepto de system prompt: ¿qué cambia con él?
+- Mostrar diferencia entre respuestas con y sin rol definido.
+- Crear `src/llm/role.md` como experto en series temporales agrícolas.
+- Implementar `load_role(path)` con fallback ante errores.
+- Variable de entorno `NAIRA_OLLAMA_ROLE_PATH` para cambiar el rol sin modificar código.
 
-### 3. Evaluación crítica (30 min)
-- ¿Vale la pena la complejidad?
-- ¿En qué casos un LLM ligero NO aporta valor?
-- ¿Cuándo es mejor una plantilla simple?
-- Discusión abierta
+### 3. Ejercicio práctico 1 (30 min)
+- Añadir parámetro `system` a `generate()` y pasarlo a Ollama.
+- Probar el mismo prompt con y sin rol. Comparar respuestas.
+- Ajustar `num_ctx` (empezar con 2048, subir a 4096 si la RPi lo permite).
+
+### 4. Interfaz Streamlit (60 min)
+- Crear `src/llm/llm_app.py`:
+  - Sidebar: conexión, modelo, timeout, num_ctx.
+  - Panel de rol editable (carga de `role.md`).
+  - Panel de contexto/datos (pegar JSON de sensores).
+  - Historial de chat.
+- Probar con datos reales de sensores pegados en el panel de contexto.
+
+### 5. Selección de modelo para RPi (20 min)
+- Comparativa práctica: descargar `qwen2.5:1.5b` y comparar latencia y calidad vs `tinyllama`.
+  ```bash
+  ollama pull qwen2.5:1.5b
+  ```
+- Medir tiempos con el mismo prompt en ambos modelos.
+- Actualizar `NAIRA_OLLAMA_MODEL=qwen2.5:1.5b` si los recursos lo permiten.
+
+### 6. Sesión opcional: optimización (30 min)
+- `num_ctx` vs latencia: tabla empírica con la RPi del aula.
+- Estrategias: caching de prompts repetidos, generación fuera del ciclo crítico.
+- ¿Cuándo es mejor una plantilla estática? Discusión abierta.
 
 ---
 

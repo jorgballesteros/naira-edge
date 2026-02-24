@@ -217,9 +217,107 @@
 
 ---
 
-## Sesión 3 (opcional) — Caso práctico y optimización
+## Sesión 3 — Rol, interfaz Streamlit y selección de modelo
 
-### Ejercicio 8 · Sistema de alertas inteligente
+### Ejercicio 8 · Rol configurable del modelo
+**Objetivo:** condicionar el comportamiento del LLM mediante un archivo de rol externo.
+
+**Tareas:**
+1. Crear `src/llm/role.md` con el rol de experto en series temporales agrícolas:
+   - Especialización: anomalías estadísticas, balance hídrico, sensores de campo.
+   - Estilo: respuestas cortas, orientadas a la acción, en español.
+2. Implementar `load_role(path: str | Path | None) -> str`:
+   - Leer el archivo con `Path.read_text(encoding="utf-8")`.
+   - Devolver cadena vacía y registrar `logger.warning` si el archivo no existe.
+3. Añadir parámetro `system: str | None` a `TinyLlamaClient.generate()` y pasarlo al payload de Ollama.
+4. Añadir `NAIRA_OLLAMA_ROLE_PATH` a `src/config.py` apuntando a `role.md` por defecto.
+5. Probar el mismo prompt con y sin rol:
+   ```python
+   r1 = client.generate("Humedad suelo: 12%. ¿Qué hago?")
+   r2 = client.generate("Humedad suelo: 12%. ¿Qué hago?", system=load_role("src/llm/role.md"))
+   ```
+
+**Entregables:**
+- Código de `load_role()` y modificación de `generate()`.
+- Comparativa de respuestas con y sin rol (tabla).
+- Archivo `role.md` con el rol creado.
+
+---
+
+### Ejercicio 9 · Simulador `stub.py`
+**Objetivo:** implementar un simulador que permite desarrollar y testear sin Ollama.
+
+**Tareas:**
+1. Crear `src/llm/stub.py` con `StubLlamaClient`:
+   - Mismos métodos que `TinyLlamaClient`: `is_model_ready`, `pull_model`, `ensure_model_available`, `generate`.
+   - `generate()` responde según keywords en el prompt (p. ej. `"anomaly"`, `"irrigation"`).
+2. Implementar `get_client(sim: bool) -> StubLlamaClient | TinyLlamaClient`.
+3. Verificar que los tests del módulo pasan con el simulador.
+4. Integrar en `src/main.py`: usar `get_client(sim=args.sim)` en el pipeline.
+
+**Entregables:**
+- Código de `StubLlamaClient` y `get_client()`.
+- Demostración de `python -m src.main --sim` mostrando la respuesta del LLM en el log.
+
+---
+
+### Ejercicio 10 · Interfaz de chat con Streamlit
+**Objetivo:** construir una interfaz visual para interactuar con el LLM local.
+
+**Tareas:**
+1. Crear `src/llm/llm_app.py` con:
+   - Sidebar: toggle modo simulado, host, puerto, modelo, timeout, num_ctx.
+   - Indicador de estado del modelo (verde/rojo) con botón de descarga.
+   - Panel "Rol del modelo": carga `role.md`, editable en sesión.
+   - Panel "Contexto / Datos": área para pegar datos de sensores.
+   - Historial de chat con `st.chat_message`.
+2. El prompt enviado al modelo debe incluir el contexto si está relleno:
+   ```
+   Contexto:
+   <datos pegados>
+
+   Pregunta: <consulta del usuario>
+   ```
+3. Abrir el firewall si es necesario:
+   ```bash
+   sudo ufw allow 8501
+   ```
+4. Probar con datos reales: pegar una lectura de sensores en el panel de contexto y preguntar al modelo.
+
+**Entregables:**
+- Código funcional de `llm_app.py`.
+- Captura de una conversación con datos de sensores en el contexto.
+
+---
+
+### Ejercicio 11 · Selección de modelo y benchmarking
+**Objetivo:** comparar TinyLlama y qwen2.5:1.5b para decidir cuál usar en producción.
+
+**Tareas:**
+1. Descargar `qwen2.5:1.5b`:
+   ```bash
+   ollama pull qwen2.5:1.5b
+   ```
+2. Ejecutar el mismo prompt con ambos modelos:
+   ```
+   Datos: temperatura_aire=34.2°C, humedad_suelo=18%, caudal=0.0 l/min.
+   Describe el estado del sistema y recomienda una acción.
+   ```
+3. Medir latencia de cada respuesta (usar `time.time()` o el campo `total_duration` de la respuesta Ollama).
+4. Evaluar calidad subjetiva (1-5) en:
+   - Coherencia con el rol definido.
+   - Concisión (¿responde en 1-2 frases?).
+   - Utilidad para un operador no técnico.
+
+**Entregables:**
+- Tabla comparativa: modelo, tamaño, latencia media, calidad (1-5).
+- Justificación de la elección para el proyecto.
+
+---
+
+## Sesión 4 (opcional) — Caso práctico y optimización
+
+### Ejercicio 12 · Sistema de alertas inteligente
 **Objetivo:** integrar LLM en pipeline completo de detección y alerta.
 
 **Descripción:**
@@ -252,7 +350,7 @@ Construir un sistema que:
 
 ---
 
-### Ejercicio 9 · Optimización con modelos cuantizados
+### Ejercicio 13 · Optimización con modelos cuantizados
 **Objetivo:** evaluar trade-off entre calidad y velocidad.
 
 **Tareas:**
@@ -281,7 +379,7 @@ Construir un sistema que:
 
 ---
 
-### Ejercicio 10 · Evaluación crítica
+### Ejercicio 14 · Evaluación crítica
 **Objetivo:** reflexionar sobre la viabilidad de LLMs en edge.
 
 **Tareas:**
@@ -302,11 +400,13 @@ Escribir un ensayo breve (1-2 páginas) respondiendo:
 
 | Criterio | Peso |
 |----------|------|
-| Instalación y configuración correcta | 15% |
-| Cliente funcional (generate, pull, etc.) | 25% |
-| Integración con detección de anomalías | 20% |
-| Benchmarking y análisis de latencia | 15% |
-| Caso práctico final (sistema de alertas) | 15% |
+| Instalación y configuración correcta | 10% |
+| Cliente funcional (generate, pull, _model_matches) | 20% |
+| Simulador `stub.py` funcional | 10% |
+| Rol configurable (`role.md` + `system` en generate) | 15% |
+| Interfaz Streamlit con chat y contexto | 15% |
+| Integración en pipeline `main.py` | 10% |
+| Benchmarking y selección de modelo justificada | 10% |
 | Evaluación crítica y reflexión | 10% |
 
 **Nota:** el caso práctico final puede desarrollarse en grupos de 2-3 personas.

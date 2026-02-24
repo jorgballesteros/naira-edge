@@ -8,10 +8,14 @@ Al finalizar el módulo, el alumnado será capaz de:
 - Comprender los fundamentos de los modelos de lenguaje y su arquitectura.
 - Diferenciar entre LLMs en la nube y LLMs locales en edge.
 - Instalar y configurar Ollama para ejecutar modelos localmente.
-- Implementar un cliente robusto para interactuar con TinyLlama.
+- Implementar un cliente robusto para interactuar con modelos Ollama.
+- Configurar el rol del modelo mediante un archivo externo (`role.md`).
+- Implementar un simulador (`stub.py`) para desarrollar sin hardware ni red.
+- Construir una interfaz de chat con Streamlit conectada al LLM local.
+- Integrar el LLM en el pipeline de adquisición y procesamiento del nodo.
 - Generar alertas y explicaciones en lenguaje natural a partir de datos IoT.
 - Evaluar limitaciones de recursos (RAM, CPU, latencia) en Raspberry Pi.
-- Diseñar casos de uso realistas donde un LLM ligero aporta valor.
+- Seleccionar el modelo más adecuado según recursos disponibles.
 
 ## Contenidos
 
@@ -38,6 +42,33 @@ Al finalizar el módulo, el alumnado será capaz de:
 - Gestión de errores y timeouts
 - Logging y trazabilidad
 - Reintentos y backoff exponencial
+- Comparación de modelos por tag (`_model_matches`)
+
+### 4b. Simulador y modo offline
+- Patrón `stub.py`: mismo interfaz, sin dependencia de Ollama
+- `StubLlamaClient`: respuestas basadas en keywords para desarrollo y tests
+- `get_client(sim=True)`: selector de modo según entorno
+
+### 4c. Rol configurable del modelo
+- Qué es un system prompt y para qué sirve
+- Archivo `role.md`: definición del rol como experto en series temporales agrícolas
+- `load_role(path)`: carga y fallback ante errores de fichero
+- Variable de entorno `NAIRA_OLLAMA_ROLE_PATH` para personalización
+- Parámetro `system` en `/api/generate` de Ollama
+
+### 4d. Parámetros de generación: num_ctx
+- Qué es el contexto en un LLM
+- `num_ctx`: ventana de tokens que el modelo puede considerar
+- Trade-off: más contexto → más RAM y latencia
+- Configuración mediante `NAIRA_OLLAMA_NUM_CTX`
+
+### 4e. Interfaz Streamlit para el LLM
+- Arquitectura de `llm_app.py`
+- Panel de conexión: host, puerto, modelo, timeout, num_ctx
+- Estado del modelo en tiempo real: verificación y descarga
+- Panel de rol editable en sesión
+- Panel de contexto/datos: pegado de datos para análisis
+- Historial de chat con `st.chat_message`
 
 ### 5. Casos de uso en sistemas IoT agrícolas
 - Generación de alertas en lenguaje natural
@@ -45,11 +76,16 @@ Al finalizar el módulo, el alumnado será capaz de:
 - Explicaciones de anomalías detectadas
 - Recomendaciones de acción para operadores
 
-### 6. Evaluación de viabilidad en Raspberry Pi
+### 6. Selección de modelo para edge
+- Comparativa: TinyLlama (1.1B) vs qwen2.5:1.5b vs llama3.2:1b
+- Criterios: tamaño en disco, RAM, calidad en tareas estructuradas
+- `qwen2.5:1.5b` como referencia para análisis de datos en RPi
+
+### 7. Evaluación de viabilidad en Raspberry Pi
 - Requisitos de hardware: RAM, CPU, almacenamiento
 - Benchmarking: latencia de generación
 - Trade-offs: calidad vs velocidad
-- Estrategias de optimización: modelos cuantizados, caching
+- Estrategias de optimización: modelos cuantizados, num_ctx, caching
 
 ## Relación con módulos anteriores
 - Depende del Módulo 4 (detección de anomalías y eventos)
